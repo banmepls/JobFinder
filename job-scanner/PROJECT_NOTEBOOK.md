@@ -209,12 +209,22 @@ Google's OpenAI-compatible endpoint (`generativelanguage.googleapis.com/v1beta/o
 `gemini_api_key`, `leaves_eu=True` — only Vertex AI is EU-resident). Adding a service is one `Provider` entry
 plus one `_MIGRATIONS` key column; storage, Settings and the model switcher are generic.
 
-⚠️ **Only offer models that can switch thinking off.** The scanning stages send `no_reasoning`
+⚠️ **Only offer models that can scan with thinking down.** The scanning stages send `no_reasoning`
 (`reasoning_effort: none`) on every job, and the model lists are shared by both roles. Gemini 2.5 **Pro** cannot
 stop thinking and answers that with a 400 — offered as a scan model it would fail a whole day's scan. That is
 why Gemini lists Flash-Lite and Flash only; `tests/test_providers.py` fails if a "pro" model is added.
 Gemini prices checked against the live list 28 Sep 2026 (cache hit = a tenth of input; the from-memory draft
 said a quarter).
+
+**Per-model thinking floor** (26 Oct 2026). `Provider.least_reasoning` maps a model that cannot stop thinking to
+the least it accepts; `providers.no_reasoning(settings, role)` resolves it against the role's model. The three
+places a scanning client is built (`main._ai`, `scheduler.jobs._ai`, `scripts/rescore_lost.py`) all call it —
+never `provider.no_reasoning` directly, or 3.5 Flash-Lite 400s in that path; a test guards all three. Measured
+live with a fresh key: `3.5-flash-lite` still 400s on `none`, accepts `minimal` (also its default), and spent
+**0 thinking tokens** on the real quick-score prompt (2043 in, 61 out). Offered, not default — $0.30 / $0.03 /
+$2.50 against 3.1 Flash-Lite's $0.25 / $0.025 / $1.50. Same day, `3.1-flash-lite` returned 503 (high demand) and
+took up to 80 s for a 63-token answer; the advanced verdict took 114 s with zero thinking — Google queueing, not
+the app, but it sits close to the 180 s `write_timeout`.
 
 ⚠️ **The price list is not the availability list — test with a FRESH key** (12 Oct 2026). `gemini-2.5-flash-lite`
 was still priced, yet answers new keys with 404 "no longer available to new users"; it was the default scan model,

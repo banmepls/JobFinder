@@ -97,6 +97,11 @@ class Provider:
     # reasoning and 28 without, for the same verdict. Empty when the provider
     # has no such switch.
     no_reasoning: dict = field(default_factory=dict)
+    # …and, per model, what to send instead for a model that cannot switch its
+    # thinking off at all. Sent `no_reasoning`, such a model answers every job
+    # of a scan with a 400; asked for its lowest level, it scans at the cost of
+    # a few thought tokens a job. A model not listed here takes `no_reasoning`.
+    least_reasoning: dict[str, dict] = field(default_factory=dict)
 
 
 PROVIDERS: dict[str, Provider] = {
@@ -163,9 +168,11 @@ PROVIDERS: dict[str, Provider] = {
         # Not 2.5 Flash-Lite either: it is still on the price list, but Google
         # answers new keys with a 404 ("no longer available to new users").
         # Its suggested replacement, 3.5 Flash-Lite, rejects
-        # `reasoning_effort: none` with a 400, so it cannot scan. 3.1 Flash-Lite
-        # accepts it; 2.5 Flash accepts it and measurably stops thinking.
-        models=("gemini-3.1-flash-lite", "gemini-2.5-flash"),
+        # `reasoning_effort: none` with a 400 - Google documents its thinking as
+        # "minimal" at the least, never off - so it scans through
+        # `least_reasoning` below. 3.1 Flash-Lite accepts "none"; 2.5 Flash
+        # accepts it and measurably stops thinking.
+        models=("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-2.5-flash"),
         default_fast="gemini-3.1-flash-lite",
         default_deep="gemini-2.5-flash",
         console="aistudio.google.com",
@@ -176,8 +183,13 @@ PROVIDERS: dict[str, Provider] = {
         # tier, text: input, cache hit, output. The cache hit is a TENTH of input
         # - the first draft of this entry, written from memory, had a quarter,
         # which overstated the bill on exactly the tokens this app repeats most.
+        #
+        # 3.5 Flash-Lite checked 26 Oct 2026 against the same page: dearer than
+        # 3.1 on every axis, output by two thirds, and its thinking is billed as
+        # output. Offered, not the default.
         price={
             "gemini-3.1-flash-lite": (0.25, 0.025, 1.50),
+            "gemini-3.5-flash-lite": (0.30, 0.03, 2.50),
             "gemini-2.5-flash": (0.30, 0.03, 2.50),
         },
         # 2.5 Flash thinks by default, and the advanced check leaves thinking on.
@@ -187,9 +199,10 @@ PROVIDERS: dict[str, Provider] = {
         reasoning_reserve=4000,
         timeout=60.0,
         write_timeout=180.0,
-        # Both offered models accept "none"; this is what keeps the title screen
-        # and quick score from paying for thoughts nobody reads.
+        # 3.1 Flash-Lite and 2.5 Flash accept "none"; this is what keeps the
+        # title screen and quick score from paying for thoughts nobody reads.
         no_reasoning={"reasoning_effort": "none"},
+        least_reasoning={"gemini-3.5-flash-lite": {"reasoning_effort": "minimal"}},
     ),
 }
 
@@ -243,6 +256,19 @@ def resolve_model(settings_row: dict, stage: str) -> str:
     if chosen in provider.models:
         return chosen
     return provider.default_fast if stage == "fast" else provider.default_deep
+
+
+def no_reasoning(settings_row: dict, role: str = SCAN) -> dict:
+    """Request fields that keep this role's model from thinking on a scan.
+
+    Per model, not per provider: Gemini 3.1 Flash-Lite switches thinking off
+    with `reasoning_effort: none`, while 3.5 Flash-Lite answers that with a 400
+    and has to be asked for its least instead. Resolved against the model the
+    client is built with - the fast model when scanning, the deep one for the
+    advanced check, which never sends it."""
+    provider = provider_for(settings_row, role)
+    model = resolve_model(settings_row, "fast" if role == SCAN else "deep")
+    return dict(provider.least_reasoning.get(model, provider.no_reasoning))
 
 
 def timeout_for(settings_row: dict, role: str = SCAN) -> float:

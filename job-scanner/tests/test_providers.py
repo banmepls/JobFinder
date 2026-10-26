@@ -63,7 +63,7 @@ def test_gemini_is_reached_through_its_openai_compatible_endpoint():
     assert gemini.leaves_eu is True
 
 
-def test_every_offered_model_can_actually_switch_thinking_off():
+def test_no_offered_model_would_fail_every_scan():
     """The scanning stages send the provider's `no_reasoning` fields on EVERY
     job. Gemini 2.5 Pro cannot turn thinking off and answers them with a 400 -
     so offering it would let one dropdown choice fail a whole day's scan. The
@@ -74,6 +74,33 @@ def test_every_offered_model_can_actually_switch_thinking_off():
     assert gemini.no_reasoning, "thinking must be switched off for scanning"
     assert not any("pro" in m for m in gemini.models), (
         "a model that cannot stop thinking would 400 every scan")
+
+
+def test_a_model_that_cannot_stop_thinking_is_asked_for_its_least():
+    """Gemini 3.5 Flash-Lite answers `reasoning_effort: none` with a 400. Sent
+    the provider-wide switch, every job of a scan would fail and sit at a zero
+    nobody decided on. The setting is chosen per model, so the models that can
+    stop thinking still do - and every place a scanning client is built has to
+    ask per model, or the fix holds in one path and not the next."""
+    import pathlib
+
+    import main
+    from scheduler import jobs
+
+    row = {"ai_provider": "gemini", "openai_model_fast": "gemini-3.5-flash-lite",
+           "gemini_api_key": "AIza-test"}
+    least = {"reasoning_effort": "minimal"}
+
+    assert providers.no_reasoning(row) == least
+    assert jobs._ai(row)["no_reasoning"] == least      # the scan itself
+    assert main._ai(row)["no_reasoning"] == least      # /api/diag
+
+    row["openai_model_fast"] = "gemini-3.1-flash-lite"
+    assert jobs._ai(row)["no_reasoning"] == {"reasoning_effort": "none"}
+
+    script = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "rescore_lost.py"
+    assert "provider.no_reasoning" not in script.read_text(), (
+        "the repair script would 400 every job it re-scores")
 
 
 def test_a_model_from_another_provider_is_not_sent_to_gemini():

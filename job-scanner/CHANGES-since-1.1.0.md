@@ -777,6 +777,18 @@ a build anyone else installs, so it was code nobody could use. The rewrite-by-
 instruction boxes for the CV and the cover letter are a different feature and
 are untouched.
 
+## Gemini 3.5 Flash-Lite can be chosen, 26 October 2026
+
+**Gemini 3.5 Flash-Lite** is now on the Gemini model lists, next to 3.1
+Flash-Lite and 2.5 Flash. It was left out on 12 October because it cannot switch
+its thinking off: told to, it answers with an error, and as the scan model that
+would have failed every job. The app now asks it for its lowest thinking level
+instead, which it accepts. Measured live, that level spent no thinking tokens on
+a job score.
+
+3.1 Flash-Lite stays the default. 3.5 costs more: $0.30 / $2.50 per million
+tokens in and out, against $0.25 / $1.50.
+
 ## Still open
 
 - **The office check is blind on half the shortlist** and the authoritative

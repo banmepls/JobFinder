@@ -120,7 +120,7 @@ def _ai(app_settings: dict) -> dict:
     return {"api_key": key, "base_url": provider.base_url,
             "reasoning_reserve": provider.reasoning_reserve,
             "timeout": provider.timeout,
-            "no_reasoning": provider.no_reasoning}
+            "no_reasoning": providers.no_reasoning(app_settings)}
 
 
 def _parse_posted(raw) -> "datetime | None":

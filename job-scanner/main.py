@@ -144,7 +144,7 @@ def _ai(s: dict, role: str = providers.SCAN) -> dict:
     return {"api_key": key, "base_url": provider.base_url,
             "reasoning_reserve": provider.reasoning_reserve,
             "timeout": providers.timeout_for(s, role),
-            "no_reasoning": provider.no_reasoning}
+            "no_reasoning": providers.no_reasoning(s, role)}
 
 
 @asynccontextmanager

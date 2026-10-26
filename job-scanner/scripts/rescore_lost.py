@@ -70,7 +70,7 @@ async def main() -> int:
         model=providers.resolve_model(settings_row, "fast"),
         api_key=key, base_url=provider.base_url,
         reasoning_reserve=provider.reasoning_reserve,
-        timeout=provider.timeout, no_reasoning=provider.no_reasoning,
+        timeout=provider.timeout, no_reasoning=providers.no_reasoning(settings_row),
     )
 
     scored = failed = 0
