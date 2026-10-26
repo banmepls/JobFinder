@@ -1441,7 +1441,20 @@ _EMPTY_SEARCH = {
     "id": None, "name": "", "keywords": "", "location": "",
     "tpr_seconds": 86400, "experience": "", "job_types": "", "remote": "",
     "source": "linkedin", "max_jobs": 50,
+    "years_experience": None, "years_margin": 1,
 }
+
+
+def _years_from_form(raw: str) -> int | None:
+    """A whole number of years from a form field, or None for "not stated".
+
+    Taken as text: an emptied number box posts "", which an int Form() field
+    answers with a 422 and the whole search is lost with it."""
+    try:
+        years = int(str(raw).strip())
+    except ValueError:
+        return None
+    return years if 0 <= years <= 50 else None
 
 # Sources offered in the search form (all wired up). A search can target any
 # combination - the scanner runs each in turn and de-duplicates.
@@ -1508,7 +1521,10 @@ async def search_create(
     remote: list[str] = Form(default=[]),
     source: list[str] = Form(default=[]),
     max_jobs: int = Form(50),
+    years_experience: str = Form(""),
+    years_margin: str = Form("1"),
 ):
+    margin = _years_from_form(years_margin)
     await queries.create_search(
         name=name.strip() or "Untitled search",
         keywords=keywords,
@@ -1519,6 +1535,8 @@ async def search_create(
         remote=_csv_from_form(remote),
         source=_csv_from_form(source) or "linkedin",
         max_jobs=max_jobs,
+        years_experience=_years_from_form(years_experience),
+        years_margin=1 if margin is None else margin,
     )
     return RedirectResponse(url="/search", status_code=303)
 
@@ -1535,7 +1553,10 @@ async def search_update(
     remote: list[str] = Form(default=[]),
     source: list[str] = Form(default=[]),
     max_jobs: int = Form(50),
+    years_experience: str = Form(""),
+    years_margin: str = Form("1"),
 ):
+    margin = _years_from_form(years_margin)
     await queries.update_search(
         search_id=search_id,
         name=name.strip() or "Untitled search",
@@ -1547,6 +1568,8 @@ async def search_update(
         remote=_csv_from_form(remote),
         source=_csv_from_form(source) or "linkedin",
         max_jobs=max_jobs,
+        years_experience=_years_from_form(years_experience),
+        years_margin=1 if margin is None else margin,
     )
     return RedirectResponse(url="/search", status_code=303)
 

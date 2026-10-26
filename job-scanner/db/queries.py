@@ -41,6 +41,17 @@ def _row_to_dict(row: aiosqlite.Row) -> dict[str, Any]:
     return data
 
 
+# A job as scoring reads it: the row plus the years its search states. Every
+# path that hands a job to the matcher loads it through here, so the years gate
+# cannot hold in one path and be skipped in another. A LEFT JOIN, so a job with
+# no search - or whose search was deleted - reads as "years not stated".
+_JOB_WITH_SEARCH = (
+    "SELECT jobs.*, s.years_experience AS search_years, "
+    "s.years_margin AS search_years_margin "
+    "FROM jobs LEFT JOIN searches s ON s.id = jobs.search_id"
+)
+
+
 # --------------------------------------------------------------------------- #
 # Jobs                                                                         #
 # --------------------------------------------------------------------------- #
@@ -100,9 +111,11 @@ async def duplicate_exists(title: str | None, company: str | None) -> bool:
         return await cur.fetchone() is not None
 
 
-async def insert_job(job: JobListing, fetched_via: str = "public") -> int | None:
+async def insert_job(job: JobListing, fetched_via: str = "public",
+                     search_id: int | None = None) -> int | None:
     """Insert a scraped job. Returns the new row id, or None if it was a duplicate.
-    `fetched_via` records the origin ('public' server fetch vs 'extension')."""
+    `fetched_via` records the origin ('public' server fetch vs 'extension');
+    `search_id` the saved search that found it, whose years scoring reads."""
     key = dedup_key(job.title, job.company)
     async with conn.connect() as db:
         # Content-level dedup (re-posts / per-city clones of the same opening).
@@ -118,8 +131,8 @@ async def insert_job(job: JobListing, fetched_via: str = "public") -> int | None
                 INSERT INTO jobs
                     (source, external_id, title, company, location,
                      description, url, posted_at, scraped_at, status, fetched_via,
-                     dedup_key, employment_type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)
+                     dedup_key, employment_type, search_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?)
                 """,
                 (
                     job.source,
@@ -134,6 +147,7 @@ async def insert_job(job: JobListing, fetched_via: str = "public") -> int | None
                     fetched_via,
                     key,
                     getattr(job, "employment_type", None),
+                    search_id,
                 ),
             )
             await db.commit()
@@ -224,7 +238,7 @@ async def get_new_jobs() -> list[dict[str, Any]]:
     async with conn.connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT * FROM jobs WHERE status = 'new' ORDER BY scraped_at DESC"
+            f"{_JOB_WITH_SEARCH} WHERE jobs.status = 'new' ORDER BY jobs.scraped_at DESC"
         )
         return [_row_to_dict(r) for r in await cur.fetchall()]
 
@@ -430,7 +444,7 @@ async def count_strong_jobs(threshold: int) -> int:
 async def get_job(job_id: int) -> dict[str, Any] | None:
     async with conn.connect() as db:
         db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,))
+        cur = await db.execute(f"{_JOB_WITH_SEARCH} WHERE jobs.id = ?", (job_id,))
         row = await cur.fetchone()
         return _row_to_dict(row) if row else None
 
@@ -697,14 +711,17 @@ async def create_search(
     remote: str,
     max_jobs: int,
     source: str = "linkedin",
+    years_experience: int | None = None,
+    years_margin: int = 1,
 ) -> int:
     async with conn.connect() as db:
         cur = await db.execute(
             """
             INSERT INTO searches
                 (name, keywords, location, tpr_seconds, experience, job_types,
-                 remote, source, max_jobs, enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                 remote, source, max_jobs, years_experience, years_margin,
+                 enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             """,
             (
                 name,
@@ -716,6 +733,8 @@ async def create_search(
                 remote,
                 source,
                 max_jobs,
+                years_experience,
+                years_margin,
                 _utc_now_iso(),
                 _utc_now_iso(),
             ),
@@ -736,6 +755,8 @@ async def update_search(
     max_jobs: int,
     source: str = "linkedin",
     enabled: int = 1,
+    years_experience: int | None = None,
+    years_margin: int = 1,
 ) -> None:
     async with conn.connect() as db:
         await db.execute(
@@ -743,7 +764,8 @@ async def update_search(
             UPDATE searches
                SET name = ?, keywords = ?, location = ?, tpr_seconds = ?,
                    experience = ?, job_types = ?, remote = ?, source = ?,
-                   max_jobs = ?, enabled = ?, updated_at = ?
+                   max_jobs = ?, years_experience = ?, years_margin = ?,
+                   enabled = ?, updated_at = ?
              WHERE id = ?
             """,
             (
@@ -756,6 +778,8 @@ async def update_search(
                 remote,
                 source,
                 max_jobs,
+                years_experience,
+                years_margin,
                 enabled,
                 _utc_now_iso(),
                 search_id,

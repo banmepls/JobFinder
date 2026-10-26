@@ -789,6 +789,21 @@ a job score.
 3.1 Flash-Lite stays the default. 3.5 costs more: $0.30 / $2.50 per million
 tokens in and out, against $0.25 / $1.50.
 
+## Years of experience, per search, 26 October 2026
+
+Each saved search now has **Your years of experience** and **Still a fit if
+short by up to** (1 year unless you change it). When an advert asks for more
+years than that allows, its score is held at 55 at most: it stays in your list,
+below the strong matches, with a note saying how many years it asked for. Within
+the margin nothing changes, and a search with the box left empty scores exactly
+as before.
+
+The comparison is done by the app, not the AI. Left to read years off the CV,
+the AI counted eight years as short of "5+"; it is now given your own figure.
+
+Jobs that arrive through the Chrome extension are not covered: the extension
+scans its own LinkedIn URLs, which are not linked to a search in the app.
+
 ## Still open
 
 - **The office check is blind on half the shortlist** and the authoritative

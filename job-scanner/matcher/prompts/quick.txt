@@ -58,6 +58,10 @@ answered independently, and the system combines them:
    candidate stated a numeric limit of their own — and then compare against THAT
    number. If they gave no number, never invent one, and never write "requires N
    years, exceeding their ceiling": there is no ceiling to exceed.
+   "Candidate experience" in the vacancy block, when present, is the years the
+   candidate has for this kind of role. The app compares it with the requirement
+   and applies their tolerance itself: a shortfall is not a blocker and must not
+   lower your score.
 
 EVERYTHING ELSE IS A SOFT SIGNAL. Preferences about role type, industry,
 company stage, tools, salary, work authorization and the "not interested in"

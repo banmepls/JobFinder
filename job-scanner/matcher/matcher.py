@@ -129,6 +129,10 @@ def _read(name: str) -> str:
 # and in reach, it just costs a move - so it stays visible, below the review
 # threshold rather than at the top of it.
 _RESIDENCY_CAP = 55
+# Score ceiling for an advert asking more years than the search's figure plus
+# its margin. The same soft tier, chosen by the user over the blocker cap: ads
+# routinely ask 5+ and hire 3, so the job stays in the list, below the strong ones.
+_YEARS_CAP = 55
 
 
 _WORKPLACE_PATTERNS = (
@@ -429,10 +433,16 @@ class AIMatcher:
         # returns an honest fit score plus a blocker flag; _apply_blocker caps
         # the score and throws out seniority claims the ad doesn't support.
         score = _apply_blocker(_clamp_score(data.get("score", 0)), data, job, instructions)
+        red_flags = _as_list(data.get("red_flags"))
+        # The model is told not to mark the years down itself, so its summary
+        # may read as a clean fit. Say why the number is capped.
+        short = seniority.years_shortfall(job)
+        if short:
+            red_flags = [f"asks {short[0]}+ years; this search is set to {short[1]}"] + red_flags
         return QuickResult(
             score=score,
             summary=str(data.get("summary", "")).strip() or "No summary.",
-            red_flags=_as_list(data.get("red_flags")),
+            red_flags=red_flags,
         )
 
     # ------------------------------------------------------------------ #
@@ -579,6 +589,13 @@ def _verdict_from_data(data: dict[str, Any], job: dict[str, Any],
             f"so it is not remote for you."
         ] + weaknesses[:3]
 
+    short = seniority.years_shortfall(job)
+    if short:
+        weaknesses = [
+            f"The advert asks for {short[0]}+ years of experience; the search "
+            f"that found it is set to {short[1]}."
+        ] + weaknesses[:3]
+
     return score, _as_list(data.get("strengths"))[:4], weaknesses
 
 
@@ -610,7 +627,12 @@ def _apply_blocker(score: int, data: dict[str, Any], job: dict[str, Any],
     Personal calibration belongs in those instructions, and a capable fast model
     (gpt-4.1-mini; 4o-mini is not one - see the notebook) reads their tiers
     correctly on its own. The one gate still enforced in code is LANGUAGE, and
-    only because it is checked against objective evidence rather than a claim."""
+    only because it is checked against objective evidence rather than a claim.
+
+    Years of experience joined it on 26 Oct 2026 for the same reason, and only
+    when the search states a figure: both sides are then numbers someone wrote
+    down - the advert's requirement and the candidate's own years - so the code
+    compares them rather than checking the model's account of the CV."""
     # Enforced in code: the candidate listed levels they will not take, and the
     # title says one of them outright. Models kept scoring these 65-75 despite
     # the instruction, so the title check does not depend on the model agreeing.
@@ -640,6 +662,13 @@ def _apply_blocker(score: int, data: dict[str, Any], job: dict[str, Any],
             logger.info("Office cap: \"%s\" in %s on %.60s",
                         office, where, job.get("title") or "")
             score = min(score, _RESIDENCY_CAP)
+    # More years asked than the search says the candidate has, beyond the margin
+    # they allowed. Soft, like residency: lowered, never hidden.
+    short = seniority.years_shortfall(job)
+    if short:
+        logger.info("Years cap: asks %d+, search set to %d on %.60s",
+                    short[0], short[1], job.get("title") or "")
+        score = min(score, _YEARS_CAP)
     if not _is_blocker(data):
         return score
     reason = str(data.get("blocker_reason") or "unspecified").strip().lower()

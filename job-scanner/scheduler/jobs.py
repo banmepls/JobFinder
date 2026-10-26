@@ -383,7 +383,7 @@ async def run_scan_cycle() -> None:
                         if not workplace_allowed(card, allowed_wt, is_remote):
                             dropped += 1
                             return
-                        jid = await queries.insert_job(card)
+                        jid = await queries.insert_job(card, search_id=search.get("id"))
                         if jid is None:
                             return
                         job = await queries.get_job(jid)
@@ -431,7 +431,7 @@ async def run_scan_cycle() -> None:
                             reason = (payload if verdict == screening.REJECT
                                       else payload.reason)
                             cheap = 25 if verdict == screening.REJECT else min(payload.score, 39)
-                            jid = await queries.insert_job(card)
+                            jid = await queries.insert_job(card, search_id=search.get("id"))
                             if jid is not None:
                                 await queries.save_quick_score(
                                     jid, cheap, f"Screened out on title: {reason}", [])

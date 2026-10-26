@@ -239,6 +239,17 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     # Google Gemini, the third provider. Its own key column like DeepSeek's, so
     # switching between services never means pasting a key again.
     ("app_settings", "gemini_api_key", "TEXT NOT NULL DEFAULT ''"),
+    # Years of experience the candidate has for the kind of role a search looks
+    # for, and how many years short of an advert's requirement still counts as a
+    # fit. Per search, because one person can have eight years in one field and
+    # two in the next. NULL = not stated, and then years change nothing.
+    ("searches", "years_experience", "INTEGER"),
+    ("searches", "years_margin", "INTEGER NOT NULL DEFAULT 1"),
+    # The search that found the job, so scoring can read that search's years.
+    # NULL for jobs from the extension, which scans its own URLs, and for every
+    # job stored before this column existed. A job found again by a second
+    # search is a duplicate and keeps its first finder.
+    ("jobs", "search_id", "INTEGER"),
 )
 
 

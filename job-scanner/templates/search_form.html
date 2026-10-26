@@ -83,6 +83,24 @@
 
   <div class="grid cols-2">
     <div class="field">
+      <label for="years_experience">Your years of experience</label>
+      <p class="hint">For the kind of role this search looks for. Jobs asking for more
+        get a lower score — at most 55 — and stay in your list. Leave empty to ignore years.</p>
+      <input type="number" id="years_experience" name="years_experience" min="0" max="50"
+             value="{{ cfg.years_experience if cfg.years_experience is not none else '' }}"
+             placeholder="e.g. 5">
+    </div>
+    <div class="field">
+      <label for="years_margin">Still a fit if short by up to</label>
+      <p class="hint">Years. Adverts often ask for more than they hire for: with 1, a
+        “6+ years” job still counts as a fit when you have 5.</p>
+      <input type="number" id="years_margin" name="years_margin" min="0" max="10"
+             value="{{ cfg.years_margin if cfg.years_margin is not none else 1 }}">
+    </div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="field">
       <label>Job type</label>
       <div class="checks">
         {% set jt = cfg.job_types.split(',') %}

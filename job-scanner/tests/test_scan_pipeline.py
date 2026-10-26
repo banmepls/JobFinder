@@ -36,6 +36,7 @@ class RecordingMatcher:
     def __init__(self):
         self.batches: list[list[dict]] = []
         self.scored: list[str] = []
+        self.scored_jobs: list[dict] = []
 
     async def title_screen_batch(self, jobs, instructions):
         self.batches.append(list(jobs))
@@ -45,6 +46,7 @@ class RecordingMatcher:
 
     async def quick_score(self, job, instructions):
         self.scored.append(job.get("title"))
+        self.scored_jobs.append(job)
         from matcher.matcher import QuickResult
 
         return QuickResult(70, "fine", [])
@@ -58,11 +60,12 @@ class RecordingMatcher:
 def scan(db, monkeypatch):
     """Runs one scan cycle over a fixed list of cards, with a fake model."""
 
-    async def setup(cards: list[JobListing]) -> RecordingMatcher:
+    async def setup(cards: list[JobListing], years: int | None = None) -> RecordingMatcher:
         await db.save_profile(resume_text="", instructions=_INSTRUCTIONS, case_bank="")
         await db.create_search(
             name="Test", keywords="pm", location="", tpr_seconds=0,
             experience="", job_types="", remote="", max_jobs=50, source="linkedin",
+            years_experience=years,
         )
 
         async def fake_source(cfg):
@@ -133,6 +136,14 @@ async def test_survivors_are_still_scored_one_at_a_time(scan):
     fake = await scan([_card(f"Product Operations {i}", n=i) for i in range(4)])
 
     assert len(fake.scored) == 4
+
+
+async def test_the_scorer_sees_the_years_of_the_search_that_found_the_job(scan):
+    """The years gate reads them off the job. A scan that stores the job without
+    its search leaves the gate silently off for every job it finds."""
+    fake = await scan([_card("Product Operations Specialist", n=1)], years=4)
+
+    assert [j.get("search_years") for j in fake.scored_jobs] == [4]
 
 
 # --------------------------------------------------------------------------- #

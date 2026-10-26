@@ -76,6 +76,27 @@ def required_years(description: str | None) -> int | None:
     return min(found) if found else None
 
 
+def years_shortfall(job: dict) -> tuple[int, int] | None:
+    """(required, have) when the advert asks for more years than the candidate
+    has, by more than the margin they allowed. None when either number is
+    unknown - this never invents a rule.
+
+    Both numbers are stated facts: one is in the advert, the other is what the
+    candidate entered on the search that found the job (`search_years`). The
+    model was left to compare them against the CV and miscounted: eight years
+    of experience read as short of "5+" (measured live, 26 Oct 2026)."""
+    have = job.get("search_years")
+    if have is None:
+        return None
+    need = required_years(job.get("description"))
+    if need is None:
+        return None
+    margin = job.get("search_years_margin") or 0
+    if need - int(have) > int(margin):
+        return need, int(have)
+    return None
+
+
 def rejected_levels(instructions: str | None) -> set[str]:
     """Level words the candidate listed as unacceptable, in their own words.
 
@@ -110,4 +131,7 @@ def signals(job: dict) -> list[str]:
     years = required_years(job.get("description"))
     if years is not None:
         lines.append(f"Experience required: {years}+ years")
+    have = job.get("search_years")
+    if have is not None:
+        lines.append(f"Candidate experience: {have} years (the candidate's own figure)")
     return lines

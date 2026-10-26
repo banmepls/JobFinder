@@ -89,6 +89,13 @@ the compare view, never touched by per-bullet edits. **No default CV** — witho
 `searches.source` is a **CSV**, so one search can hit several boards. `job_assets` is a per-job key/value store
 for generated text — anything not in `gen.KINDS` lives there without becoming a UI tab.
 
+**`jobs.search_id`** (26 Oct 2026) is the search that found the job, so scoring can read that search's
+`years_experience` / `years_margin` (§5). **Load a job for scoring through `get_job` / `get_new_jobs`**: both
+select via `_JOB_WITH_SEARCH`, a LEFT JOIN adding `search_years` and `search_years_margin`. A `SELECT * FROM
+jobs` hands the matcher a job with no years and the gate goes quietly off. NULL for extension jobs (it scans
+its own URLs, not the app's searches) and for everything stored before the column; a job found again by a
+second search is a duplicate and keeps its first finder.
+
 **`model_usage`** (`db/usage.py`) is the only record of what the models charged: four numbers per call —
 stage, model, prompt, cached, completion — written after the answer arrives and never allowed to raise. Read by
 `/statistic`. Everything anyone said about cost before 18 Aug 2026 was arithmetic over measured prompts.
@@ -163,9 +170,11 @@ belongs in a prompt or in code** — no thresholds, no country lists tied to thi
 | `residency.py` | remote job that still demands you *live* somewhere | "a company based in Switzerland" ≠ "a candidate based in Switzerland" — patterns anchor on the person hired. A region is not a residency: "remote within Europe" does not make you a Swiss resident. Soft cap 55. |
 | `workplace.py` | office requirement buried in the body | "United Kingdom (Remote)" with a hybrid model 3000 chars down. Of nine live matches for "hybrid", **seven** were methodology ("Agile, Waterfall, or hybrid"), travel, a gym, or an option the candidate may decline — hence the veto regexes and the ±130-char context window. |
 | `screening.office_abroad` | Hybrid/on-site in a country the user does not live in | the card's chip and its location were never compared. Returns None on anything unknown. |
+| `seniority.years_shortfall` | advert's `required_years` exceeds the search's `years_experience` by more than its `years_margin` | **soft cap 55** (`_YEARS_CAP`), the user's choice over 25: ads ask 5+ and hire 3. Off when the search states no years. The model is told the figure and told NOT to block or mark down for it, or jobs inside the margin get marked down anyway; the code adds the red flag / weakness that explains the cap. |
 
 Each gate also writes a line into `_vacancy_block` (`Description language:`, `Title seniority:`,
-`Experience required:`, `Office requirement in the body:`) so the model's own summary agrees with the code.
+`Experience required:`, `Candidate experience:`, `Office requirement in the body:`) so the model's own summary
+agrees with the code.
 
 ⚠️ **A required language is not the same as the advert's language — the model will NOT catch it** (26 Aug
 2026). Because the score is "as if every constraint were satisfied" and the model's only language blocker is a
@@ -179,6 +188,12 @@ this section.
 ⚠️ **Do not re-add a code-side seniority *verifier*.** One was built and removed the same day; it rested on the
 belief the model confabulated a "ceiling of 4 years" — the user's instructions literally say that. The cure is a
 capable model reading tiered instructions, not a second dumber opinion in Python.
+The years gate (26 Oct 2026) is **not** that verifier: it never checks the model's claims. It compares two
+numbers people wrote down — the advert's requirement and the years the user entered on the search — the way the
+language gate compares the advert against the user's languages. Measured live the same day: asked to count
+years off the CV, 3.5 Flash-Lite read eight years as short of "5+". Given the search's figure, a 7+ advert
+against 4 years came back at 55 with the gap stated, and a 5+ advert inside the 1-year margin scored 95. The
+model still echoes the gap as a second weakness despite the prompt — cosmetic, left alone.
 
 ⚠️ **`gpt-4o-mini` cannot do graded scoring — measured.** It zeroes anything it flags, so the softening is wasted
 and four prompt rewrites did not fix it. Same jobs, same prompt: a mid-level PM asking 3 years scored 0 on

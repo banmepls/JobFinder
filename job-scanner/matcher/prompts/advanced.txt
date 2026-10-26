@@ -54,6 +54,10 @@ enforces the cap, so answer the two questions independently):
   ⚠️ YEARS ARE NOT A LEVEL: "N+ years" is a bar to clear. Treat it as a blocker
   only if the candidate stated a numeric limit of their own, and compare against
   THAT number. Never invent a ceiling they did not state.
+  "Candidate experience" in the vacancy block, when present, is the years the
+  candidate has for this kind of role - use it instead of counting resume dates.
+  The app compares it with the requirement and states any shortfall itself, so
+  it is not a blocker, not a weakness to list, and must not lower your score.
 
 EVERYTHING ELSE IS INDIVIDUAL — role type, industry, company stage, tools,
 salary, work authorization, the "not interested in" list. These lower the score
