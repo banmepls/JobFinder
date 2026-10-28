@@ -23,6 +23,7 @@ def build_cv_css(base_px: float = 12.5) -> str:
 .cv-doc .entry {{ margin-bottom:.6em; }}
 .cv-doc .entry-head {{ display:flex; justify-content:space-between; gap:1em; }}
 .cv-doc .entry-head .date {{ font-style:italic; white-space:nowrap; }}
+.cv-doc .entry-desc {{ font-style:italic; }}
 .cv-doc ul {{ margin:.2em 0 0; padding-left:1.4em; }}
 .cv-doc li {{ margin-bottom:.22em; }}
 .cv-doc p {{ margin:0; }}
@@ -38,8 +39,13 @@ CV_DOC_CSS = build_cv_css(12.5)
 
 def cv_to_text(cv_html: str) -> str:
     """Plain-text version of the WHOLE CV document (headline, summary, section
-    headers, skills and bullets), used as the résumé everywhere the AI needs it.
-    The CV document is the single source of truth for the résumé."""
+    headers, each entry's heading, skills and bullets), used as the résumé
+    everywhere the AI needs it. The CV document is the single source of truth
+    for the résumé.
+
+    The entry heading - role, company, place and dates - is a div, not a p or
+    li, and was skipped until 28 Oct 2026: the AI got every bullet as one list
+    with no job title, employer or date, while the page showed the CV whole."""
     from bs4 import BeautifulSoup
 
     def norm(el) -> str:
@@ -50,14 +56,27 @@ def cv_to_text(cv_html: str) -> str:
     sub = soup.select_one(".cv-subtitle")
     if sub and norm(sub):
         lines.append(f"HEADLINE: {norm(sub)}")
-    for el in soup.find_all(["h2", "p", "li"]):
-        txt = norm(el)
+    for el in soup.find_all(["h2", "p", "li", "div"]):
+        if el.name == "div" and "entry-head" not in (el.get("class") or []):
+            continue
+        if el.name == "div":
+            # Dates sit in their own span; set them off so they read as dates.
+            date = el.select_one(".date")
+            when = norm(date) if date else ""
+            if date:
+                date.decompose()
+            what = norm(el)
+            txt = f"{what} | {when}" if what and when else what or when
+        else:
+            txt = norm(el)
         if not txt:
             continue
         if el.name == "h2":
             lines.append(f"\n{txt.upper()}")
         elif el.name == "li":
             lines.append(f"- {txt}")
-        else:  # summary paragraph
+        elif el.name == "div":  # entry heading: a blank line before each job
+            lines.append(f"\n{txt}")
+        else:  # summary paragraph, or an entry's one-line description
             lines.append(txt)
     return "\n".join(lines).strip()

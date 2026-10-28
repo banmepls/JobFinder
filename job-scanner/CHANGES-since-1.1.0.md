@@ -804,6 +804,18 @@ the AI counted eight years as short of "5+"; it is now given your own figure.
 Jobs that arrive through the Chrome extension are not covered: the extension
 scans its own LinkedIn URLs, which are not linked to a search in the app.
 
+## The AI reads your whole CV, 28 October 2026
+
+The Profile page showed the CV complete, but the AI was handed only its bullet
+points: every job title, employer, location and date was left out of what the
+advanced check, cover letters and CV edits read. It could not tell your most
+senior role from your first, or see when you held either. The AI now gets each
+job's heading above its own bullets.
+
+Importing a CV also keeps the one-line description under a company's name,
+which was dropped before. Upload your CV again to get those back; the job
+headings need no re-upload.
+
 ## Still open
 
 - **The office check is blind on half the shortlist** and the authoritative

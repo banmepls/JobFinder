@@ -405,6 +405,16 @@ One field, not an event log — it answers "how far did this get", which is the 
 
 ## 10. Writing: copilot, CV, letters
 
+⚠️ **What the page shows is not what the AI reads** (28 Oct 2026). A CV PDF goes text (`pypdf`) → HTML (writing
+model, `_CV_STRUCTURE_SYSTEM`, first 12 000 chars) → `profile.cv_html`, and every AI call reads
+`cv_content.cv_to_text(cv_html)`, derived on read in `get_profile_full`. `cv_to_text` read only `h2`/`p`/`li`,
+and each job's role, company, place and dates sit in `div.entry-head` — so the AI got every bullet as one
+list with no title, employer or date, while the Profile page rendered the CV whole. Measured on a real
+two-page CV: 26 of 60 facts reached the AI; after the fix 55, the other five being the name/contact line
+(never sent) and a company-wide date span the per-role dates cover. Company one-liners now have a slot,
+`p.entry-desc` (also named in `_CV_CHAT_SYSTEM`, or an edit strips it); without one the model dropped all
+three. **A new class in either CV prompt must be read by `cv_to_text`**, or the AI silently loses it.
+
 **Cover-letter brief** — a per-job note ("mention my Shopify work"), stored in `job_assets` under
 `cl_brief`; not in `gen.KINDS`, so it never becomes a tab. Prepended to `_context()` as highest priority,
 **before** the resume, with an explicit "do not invent evidence" clause so "say I led a 20-person team" cannot

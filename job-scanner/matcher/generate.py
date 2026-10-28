@@ -58,6 +58,9 @@ _CV_STRUCTURE_SYSTEM = (
     '<span><strong>Role | Company</strong> | Location</span>'
     '<span class="date">Dates</span></div><ul><li>…</li></ul></div>. '
     "If there is no date, omit the date span.\n"
+    "- A line describing the company or project, under its heading → "
+    '<p class="entry-desc">…</p> right after the entry-head, before the <ul>. '
+    "If one company has several roles, put it in the first of them only.\n"
     "- Bullet points → <li>…</li> inside <ul>. Skills/education lines can be "
     '<ul><li><strong>Label:</strong> …</li></ul>.\n'
     "- Any URL in the text → wrap the relevant words in <a href=\"URL\">…</a>.\n"
@@ -622,7 +625,8 @@ _CV_CHAT_SYSTEM = (
     "character for character identical.\n"
     "3. Keep the existing structure and classes exactly: div.cv-name, "
     "div.cv-subtitle, div.cv-contact, h2, div.entry, div.entry-head, span.date, "
-    "ul, li, p, a. Do not invent new classes or reorder sections unless asked.\n"
+    "p.entry-desc, ul, li, p, a. Do not invent new classes or reorder sections "
+    "unless asked.\n"
     "4. NEVER invent experience, employers, dates, tools or numbers. You may "
     "rephrase, shorten, merge, split, reorder bullets and change emphasis. If "
     "the instruction needs a fact that is not already in the résumé or in the "

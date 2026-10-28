@@ -1,6 +1,9 @@
-"""User-authored inputs that feed generation: the per-job cover-letter brief and
-inline CV edits. Both write to storage, so both can lose work if they regress."""
+"""User-authored inputs that feed generation: the per-job cover-letter brief,
+inline CV edits, and the CV itself as the AI reads it. The first two write to
+storage, so they can lose work if they regress; the last can hide half the CV
+from the AI while the page still shows all of it."""
 
+from cv_content import cv_to_text
 from matcher.generate import _context
 
 
@@ -178,3 +181,56 @@ def test_the_letter_is_short_enough_to_be_read():
     from matcher.generate import _SYSTEM
 
     assert "180-260 words" in _SYSTEM["cover_letter"]
+
+
+# --------------------------------------------------------------------------- #
+# The CV as the AI reads it                                                    #
+# --------------------------------------------------------------------------- #
+
+# Two jobs, in exactly the layout the import prompt asks the model for.
+_TWO_JOBS = (
+    '<div class="cv-name">Alex Example</div>'
+    '<div class="cv-subtitle"><strong>Product Operations Manager</strong> | Berlin</div>'
+    '<h2>Experience</h2>'
+    '<div class="entry"><div class="entry-head"><span><strong>Product Operations Manager | '
+    'Tailspin Software</strong> | Berlin</span><span class="date">2021 – Present</span></div>'
+    '<p class="entry-desc">Logistics software, 200 people.</p>'
+    '<ul><li>Ran quarterly planning for 6 squads.</li></ul></div>'
+    '<div class="entry"><div class="entry-head"><span><strong>Program Manager | Adventure '
+    'Works</strong> | Munich</span><span class="date">2018 – 2021</span></div>'
+    '<ul><li>Coordinated delivery for a 40-person org.</li></ul></div>'
+)
+
+
+def test_the_ai_sees_which_job_each_bullet_belongs_to():
+    """An entry's heading is a div, which the plain-text version skipped: the AI
+    got every bullet as one list with no title, employer or date - it could not
+    tell a CTO's work from a junior developer's, or count years - while the
+    Profile page showed the CV whole. Found on a real CV, 28 Oct 2026."""
+    text = cv_to_text(_TWO_JOBS)
+
+    first = "Product Operations Manager | Tailspin Software | Berlin | 2021 – Present"
+    second = "Program Manager | Adventure Works | Munich | 2018 – 2021"
+    assert first in text and second in text
+    # Each heading sits above its own bullets.
+    assert (text.index(first) < text.index("Ran quarterly planning")
+            < text.index(second) < text.index("Coordinated delivery"))
+
+
+def test_a_heading_with_no_date_is_still_read():
+    """The no-AI fallback importer writes the whole line into the heading with
+    no date span."""
+    head = '<div class="entry-head"><span><strong>Freelance | Lisbon 2026</strong></span></div>'
+
+    assert "Freelance | Lisbon 2026" in cv_to_text(head)
+
+
+def test_a_company_description_has_a_place_and_reaches_the_ai():
+    """The import prompt gave a company's one-line description nowhere to go, and
+    on a real CV the model dropped all three despite being told to keep every
+    word. The edit prompt has to name the class too, or an edit strips it."""
+    from matcher.generate import _CV_CHAT_SYSTEM, _CV_STRUCTURE_SYSTEM
+
+    assert 'class="entry-desc"' in _CV_STRUCTURE_SYSTEM
+    assert "p.entry-desc" in _CV_CHAT_SYSTEM
+    assert "Logistics software, 200 people." in cv_to_text(_TWO_JOBS)
