@@ -1066,7 +1066,8 @@
       // spinner + swaps), so leave those forms alone here.
       if (f.hasAttribute('data-advanced')) return;
       var action = f.getAttribute('action') || '';
-      if (action.indexOf('/generate/') === -1 && !/\/advanced$/.test(action)) return;
+      if (action.indexOf('/generate/') === -1 && !/\/advanced$/.test(action)
+          && action !== '/search/suggest') return;
       var btn = f.querySelector('button[type="submit"], button:not([type])');
       if (btn && !btn.disabled) {
         var original = btn.innerHTML;

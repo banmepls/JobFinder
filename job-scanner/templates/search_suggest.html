@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Searches from your CV — Job Finder{% endblock %}
+
+{% block content %}
+<p><a href="/search">← Back to searches</a></p>
+<h1>Searches from your CV</h1>
+
+{% if not has_cv %}
+  <div class="card empty">
+    <h2>No CV yet</h2>
+    <p class="muted">The suggestions are read from your CV. Upload it on the Profile
+      page first.</p>
+    <a class="btn" href="/profile?tab=advanced">Go to your CV</a>
+  </div>
+{% elif not proposals %}
+  <div class="card empty">
+    <h2>No suggestions came back</h2>
+    <p class="muted">The writing service did not answer. Check it in Settings and
+      try again.</p>
+    <form method="post" action="/search/suggest" style="margin:0">
+      <button class="btn" type="submit">Try again</button>
+    </form>
+  </div>
+{% else %}
+<form method="post" action="/search/suggest/save">
+  <input type="hidden" name="count" value="{{ proposals|length }}">
+  <input type="hidden" name="tpr_seconds" value="{{ base.tpr_seconds }}">
+  <input type="hidden" name="max_jobs" value="{{ base.max_jobs }}">
+  <input type="hidden" name="experience" value="{{ base.experience }}">
+  <input type="hidden" name="job_types" value="{{ base.job_types }}">
+  <input type="hidden" name="remote" value="{{ base.remote }}">
+
+  <p class="hint">One search for each area of your CV. Untick the ones you don't
+    want and edit the rest: nothing is saved until you press Create.</p>
+
+  {% for p in proposals %}{% set i = loop.index0 %}
+  <div class="card">
+    <label class="check">
+      <input type="checkbox" name="include_{{ i }}" value="1" checked>
+      <strong>Create this search</strong>
+    </label>
+    {% if p.why %}<p class="hint">{{ p.why }}</p>{% endif %}
+
+    <div class="field">
+      <label for="name_{{ i }}">Search name</label>
+      <input type="text" id="name_{{ i }}" name="name_{{ i }}" value="{{ p.name }}">
+    </div>
+
+    <div class="field">
+      <label for="keywords_{{ i }}">Keywords / roles</label>
+      <p class="hint">One role per line. Each one is searched on every source, so
+        fewer lines means a faster scan.</p>
+      <textarea id="keywords_{{ i }}" name="keywords_{{ i }}" rows="4">{{ p.keywords|join('\n') }}</textarea>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="field">
+        <label for="years_{{ i }}">Your years of experience</label>
+        <p class="hint">{% if p.years is not none %}Counted from the dates of the roles
+          below.{% else %}No dates could be read for this area. Leave it empty to
+          ignore years.{% endif %}</p>
+        <input type="number" id="years_{{ i }}" name="years_{{ i }}" min="0" max="50"
+               value="{{ p.years if p.years is not none else '' }}">
+      </div>
+      <div class="field">
+        <label for="margin_{{ i }}">Still a fit if short by up to</label>
+        <p class="hint">Years. Adverts often ask for more than they hire for.</p>
+        <input type="number" id="margin_{{ i }}" name="margin_{{ i }}" min="0" max="10" value="1">
+      </div>
+    </div>
+
+    {% if p.based_on %}
+    <p class="hint">Based on: {{ p.based_on|join(' · ') }}</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="card">
+    <div class="field" style="max-width:460px">
+      <label for="location">Location for these searches</label>
+      <input type="text" id="location" name="location" value="{{ base.location }}"
+             placeholder="European Union / Germany / Remote">
+    </div>
+    <div class="field">
+      <label>Sources</label>
+      {% set chosen = (base.source or 'linkedin').split(',') %}
+      <div class="checks">
+        {% for val, name, ready in sources %}
+          <label class="check">
+            <input type="checkbox" name="source" value="{{ val }}"
+                   {% if val in chosen %}checked{% endif %} {% if not ready %}disabled{% endif %}>
+            {{ name }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+    <p class="hint">{% if base.id %}The date window, job cap and other filters are copied
+      from your search “{{ base.name }}”.{% else %}Each search starts with the default
+      filters.{% endif %} You can change any of them on each search afterwards.</p>
+    <div class="actions">
+      <button class="btn" type="submit">Create the ticked searches</button>
+      <a class="btn secondary" href="/search">Cancel</a>
+    </div>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

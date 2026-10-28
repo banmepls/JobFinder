@@ -830,6 +830,14 @@ never hide a job by themselves; a role in another city is scored lower and
 stays in the list. Write your location and languages in your instructions if
 they are rules for you.
 
+## Searches suggested from your CV, 28 October 2026
+
+**Suggest from my CV** on the Searches page reads your CV and proposes one
+search for each area of it, such as engineering leadership or AI engineering,
+with the job titles to search for and your years in that area, counted from the
+dates of the roles that show it. You review and edit each one before anything is
+saved.
+
 ## Still open
 
 - **The office check is blind on half the shortlist** and the authoritative

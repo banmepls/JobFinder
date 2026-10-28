@@ -99,6 +99,82 @@ async def structure_cv_html(text: str, model: str | None = None,
         return ""
     return html
 
+
+_SEARCH_SUGGEST_SYSTEM = (
+    "You read a candidate's CV and propose saved job searches for them: one for "
+    "each distinct ASPECT of what they have done - a kind of role they could "
+    "credibly apply for next, by function, domain or level (for example "
+    "engineering leadership, AI engineering, process automation).\n"
+    "The CV's work entries are numbered [1], [2], …; each heading gives the role, "
+    "company, dates and length.\n"
+    "Return ONLY valid JSON:\n"
+    '{"searches": [{"name": "...", "keywords": ["...", "..."], "entries": [1, 3], '
+    '"why": "..."}]}\n'
+    "- 3 to 5 searches, fewer if the CV really has fewer aspects. No two may "
+    "cover the same ground.\n"
+    "- name: 2 to 4 words naming the aspect.\n"
+    "- keywords: 2 to 4 job titles exactly as employers write them in adverts, "
+    "each one searched on its own. At the level the CV shows, no locations, and "
+    "no level words such as Senior or Lead that the CV does not support.\n"
+    "- entries: the numbers of the work entries where they actually did this "
+    "kind of work. The app counts their years in this aspect from these entries' "
+    "dates, so include an entry only when its work is clearly of this kind. "
+    "Never include education.\n"
+    "- why: one sentence, at most 20 words, naming what on the CV supports it.\n"
+    "Never invent experience. Output nothing outside the JSON object."
+)
+
+
+def _clean_suggestions(data: Any, n_entries: int) -> list[dict]:
+    """Keep only what the page can use. An entry number the CV does not have
+    is dropped rather than trusted - the years are counted from these."""
+    out: list[dict] = []
+    items = data.get("searches") if isinstance(data, dict) else None
+    for item in (items if isinstance(items, list) else [])[:6]:
+        if not isinstance(item, dict):
+            continue
+        name = " ".join(str(item.get("name") or "").split())[:60]
+        keywords: list[str] = []
+        for raw in item.get("keywords") or []:
+            kw = " ".join(str(raw).split())[:60]
+            if kw and kw.lower() not in (k.lower() for k in keywords):
+                keywords.append(kw)
+        entries = sorted({int(e) for e in item.get("entries") or []
+                          if str(e).strip().isdigit() and 1 <= int(e) <= n_entries})
+        if name and keywords:
+            out.append({"name": name, "keywords": keywords[:4], "entries": entries,
+                        "why": " ".join(str(item.get("why") or "").split())[:200]})
+    return out
+
+
+async def suggest_searches(cv_text: str, n_entries: int, model: str | None = None,
+                           api_key: str | None = None,
+                           base_url: str | None = None) -> list[dict]:
+    """Saved searches proposed from the CV, one per aspect of it. The model
+    names the aspects and which numbered entries show each; the caller counts
+    the years from those entries' dates. [] on any failure."""
+    key = (api_key or "").strip() or settings.openai_api_key
+    if not key or not (cv_text or "").strip():
+        return []
+    try:
+        client = AsyncOpenAI(api_key=key, base_url=base_url or None,
+                             timeout=_TIMEOUT, max_retries=1)
+        resp = await client.chat.completions.create(
+            model=model or settings.openai_model,
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": _SEARCH_SUGGEST_SYSTEM},
+                {"role": "user", "content": cv_text[:12000]},
+            ],
+        )
+        await usage.record("write", model or settings.openai_model, getattr(resp, "usage", None))
+        data = json.loads(resp.choices[0].message.content or "{}")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Search suggestions failed: %s", exc)
+        return []
+    return _clean_suggestions(data, n_entries)
+
 _SYSTEM = {
     "cover_letter": (
         "You write a cover letter FOR the candidate, in the FIRST person and in "

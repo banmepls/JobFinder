@@ -373,6 +373,12 @@ CV editor lives here now**, `#cv-mine`; `templates/cv.html` is gone), `/search*`
 `/settings`. `/favorites` is a 307 to `/?view=saved`. The full list is
 `grep -n '^@app\.' main.py` — read it there, it moves.
 
+**Searches from the CV** (28 Oct 2026): `POST /search/suggest` asks the WRITING model (`gen.suggest_searches`, in
+the structural writers test) for one search per aspect of the CV, with the numbered entries that show each;
+the years are counted in code (`cv_content.years_in`) from those entries' dates, and the page only shows them.
+`POST /search/suggest/save` creates the ticked ones and never touches existing searches. Both are registered
+**before** `/search/{search_id}`, which would take "suggest" as an id and answer 422.
+
 The personal assistant tab (`/chat`, `assistant/`, `/api/transcribe`) was removed when the code was opened
 (19 Oct 2026). It drove the local Claude CLI and never had a page; `/cv/chat` and `/jobs/{id}/letter/chat` are
 unrelated — they rewrite the CV and the letter from a typed instruction.

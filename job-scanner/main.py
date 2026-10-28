@@ -1541,6 +1541,75 @@ async def search_create(
     return RedirectResponse(url="/search", status_code=303)
 
 
+# Registered before /search/{search_id}: that route would take "suggest" as an
+# id and answer 422 rather than fall through.
+@app.post("/search/suggest", response_class=HTMLResponse)
+async def search_suggest(request: Request):
+    """Searches proposed from the CV, one per aspect of it, shown for review -
+    nothing is saved here. The writing model names the aspects and which roles
+    show each; the years are counted from those roles' dates, in code."""
+    from datetime import date
+
+    cv_html = ((await queries.get_profile()).get("cv_html") or "").strip()
+    today = date.today()
+    entries = cv_content.cv_entries(cv_html, today)
+    proposals: list[dict] = []
+    if cv_html:
+        app_settings = await queries.get_app_settings()
+        proposals = await gen.suggest_searches(
+            cv_content.cv_to_text(cv_html, today, numbered=True), len(entries),
+            model=_write_model(app_settings), **_writer_client(app_settings))
+    for p in proposals:
+        chosen = [entries[i - 1] for i in p["entries"]]
+        p["years"] = cv_content.years_in(e["span"] for e in chosen)
+        p["based_on"] = [e["heading"] for e in chosen]
+    searches = await queries.list_searches()       # newest first
+    return templates.TemplateResponse(request, "search_suggest.html", {
+        "active": "search", "has_cv": bool(cv_html), "proposals": proposals,
+        "base": searches[0] if searches else dict(_EMPTY_SEARCH),
+        "sources": SEARCH_SOURCE_OPTIONS,
+    })
+
+
+def _form_int(raw, default: int) -> int:
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+@app.post("/search/suggest/save")
+async def search_suggest_save(request: Request):
+    """Create the suggested searches the user kept ticked. Existing searches
+    are never touched: this only ever adds."""
+    form = await request.form()
+    shared = {
+        "location": str(form.get("location") or "").strip(),
+        "source": _csv_from_form([str(s) for s in form.getlist("source")]) or "linkedin",
+        "tpr_seconds": _form_int(form.get("tpr_seconds"), 86400),
+        "max_jobs": _form_int(form.get("max_jobs"), 50),
+        "experience": str(form.get("experience") or ""),
+        "job_types": str(form.get("job_types") or ""),
+        "remote": str(form.get("remote") or ""),
+    }
+    for i in range(min(_form_int(form.get("count"), 0), 10)):
+        if not form.get(f"include_{i}"):
+            continue
+        keywords = "\n".join(line.strip() for line in
+                             str(form.get(f"keywords_{i}") or "").splitlines() if line.strip())
+        if not keywords:
+            continue
+        margin = _years_from_form(str(form.get(f"margin_{i}") or "1"))
+        await queries.create_search(
+            name=str(form.get(f"name_{i}") or "").strip() or "Untitled search",
+            keywords=keywords,
+            years_experience=_years_from_form(str(form.get(f"years_{i}") or "")),
+            years_margin=1 if margin is None else margin,
+            **shared,
+        )
+    return RedirectResponse(url="/search", status_code=303)
+
+
 @app.post("/search/{search_id}")
 async def search_update(
     search_id: int,

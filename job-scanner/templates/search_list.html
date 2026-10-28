@@ -4,7 +4,12 @@
 {% block content %}
 <div class="page-head">
   <h1>Searches</h1>
-  {% if searches %}<a class="btn" href="/search/new">Add another search</a>{% endif %}
+  <div class="actions" style="margin:0">
+    <form method="post" action="/search/suggest" style="margin:0">
+      <button class="btn secondary" type="submit">Suggest from my CV</button>
+    </form>
+    {% if searches %}<a class="btn" href="/search/new">Add another search</a>{% endif %}
+  </div>
 </div>
 
 {% if not searches %}
