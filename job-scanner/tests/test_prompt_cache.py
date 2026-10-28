@@ -128,6 +128,31 @@ async def test_the_title_screen_puts_the_titles_last(capture):
     assert "Product Manager 1" not in first[:shared], "a title must not sit in the prefix"
 
 
+async def test_the_cv_rides_in_the_cached_prefix_of_both_scanning_calls(capture):
+    """Every job is now judged against the CV - about 1 100 tokens on a real
+    one. Ahead of the first per-job word it is billed at a tenth; after it, in
+    full on every job of every scan. And with no CV there is no CV block, so
+    the prompt does not claim one."""
+    cv = "CTO | Northwind Traders | Aug 2026 – Present (3 mos)\n- Shipped a platform. " * 20
+    m = matcher_mod.AIMatcher(model="x", api_key="sk-test", cv_text=cv)
+    for n in (1, 2):
+        await m.quick_score(_job(n), PROFILE["instructions"])
+    for batch in ([_job(3), _job(4)], [_job(5), _job(6)]):
+        await m.title_screen_batch(batch, PROFILE["instructions"])
+    sent = capture["client"].sent
+
+    for first, second, per_job in ((sent[0], sent[1], "Job number 1."),
+                                   (sent[2], sent[3], "Product Manager 3")):
+        wire = _wire(first)
+        head = wire[:_common_prefix(wire, _wire(second))]
+        assert "=== CANDIDATE CV" in head and "Northwind Traders" in head
+        assert per_job not in head
+
+    bare = matcher_mod.AIMatcher(model="x", api_key="sk-test")
+    await bare.quick_score(_job(7), PROFILE["instructions"])
+    assert "=== CANDIDATE CV" not in _wire(sent[-1])
+
+
 async def test_the_candidates_own_context_is_never_split_by_the_job(capture):
     """Interleaving would be the subtle version of the same mistake: each block
     is cheap on its own but everything after the first per-job word is billed in

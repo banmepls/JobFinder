@@ -37,6 +37,12 @@ class RecordingMatcher:
         self.batches: list[list[dict]] = []
         self.scored: list[str] = []
         self.scored_jobs: list[dict] = []
+        self.built_with: dict = {}
+
+    def built(self, **kw) -> "RecordingMatcher":
+        """Stands in for the constructor, remembering what it was given."""
+        self.built_with = kw
+        return self
 
     async def title_screen_batch(self, jobs, instructions):
         self.batches.append(list(jobs))
@@ -60,8 +66,9 @@ class RecordingMatcher:
 def scan(db, monkeypatch):
     """Runs one scan cycle over a fixed list of cards, with a fake model."""
 
-    async def setup(cards: list[JobListing], years: int | None = None) -> RecordingMatcher:
-        await db.save_profile(resume_text="", instructions=_INSTRUCTIONS, case_bank="")
+    async def setup(cards: list[JobListing], years: int | None = None,
+                    cv: str = "") -> RecordingMatcher:
+        await db.save_profile(resume_text=cv, instructions=_INSTRUCTIONS, case_bank="")
         await db.create_search(
             name="Test", keywords="pm", location="", tpr_seconds=0,
             experience="", job_types="", remote="", max_jobs=50, source="linkedin",
@@ -74,7 +81,7 @@ def scan(db, monkeypatch):
 
         fake = RecordingMatcher()
         monkeypatch.setitem(sched.SOURCE_FETCHERS, "linkedin", fake_source)
-        monkeypatch.setattr(sched, "AIMatcher", lambda **kw: fake)
+        monkeypatch.setattr(sched, "AIMatcher", fake.built)
         monkeypatch.setattr(sched, "send_digest", _no_digest)
         # The detail fetch would hit the network; every card here has a body.
         await sched.run_scan_cycle()
@@ -136,6 +143,38 @@ async def test_survivors_are_still_scored_one_at_a_time(scan):
     fake = await scan([_card(f"Product Operations {i}", n=i) for i in range(4)])
 
     assert len(fake.scored) == 4
+
+
+async def test_the_scan_judges_every_job_against_the_cv(scan):
+    """Measured on 22 real adverts with empty instructions and no CV: every one
+    scored 80-100, accountants and inside sales included. The CV is what the
+    score has to go on."""
+    fake = await scan([_card("Product Operations Specialist", n=1)],
+                      cv="CTO | Northwind Traders | Aug 2026 – Present")
+
+    assert fake.built_with.get("cv_text") == "CTO | Northwind Traders | Aug 2026 – Present"
+
+
+def test_every_scanning_matcher_is_given_the_cv():
+    """Structural, because the failure is a call site added later: a scan, a
+    repair script or the diagnostics page that builds its matcher without the
+    CV scores against nothing, and nothing says so."""
+    import ast
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    found = 0
+    for name in ("main.py", "scheduler/jobs.py", "scripts/rescore_lost.py"):
+        for node in ast.walk(ast.parse((root / name).read_text(encoding="utf-8"))):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "AIMatcher"):
+                continue
+            model = ast.dump(next((k.value for k in node.keywords if k.arg == "model"), node))
+            if "'fast'" not in model and "_fast_model" not in model:
+                continue          # the advanced check: the writing role, with the full profile
+            found += 1
+            assert "cv_text" in {k.arg for k in node.keywords}, \
+                f"{name}:{node.lineno} builds a scanning matcher without the CV"
+    assert found >= 4, f"expected the scan, the extension path, repair and diag; found {found}"
 
 
 async def test_the_scorer_sees_the_years_of_the_search_that_found_the_job(scan):
@@ -245,12 +284,12 @@ async def test_a_single_job_skips_the_batch_wrapper():
 @pytest.fixture
 def ingest(db, monkeypatch):
     """Runs process_new_jobs over jobs already stored as 'new'."""
-    async def setup(cards: list[JobListing]) -> RecordingMatcher:
-        await db.save_profile(resume_text="", instructions=_INSTRUCTIONS, case_bank="")
+    async def setup(cards: list[JobListing], cv: str = "") -> RecordingMatcher:
+        await db.save_profile(resume_text=cv, instructions=_INSTRUCTIONS, case_bank="")
         for card in cards:
             await db.insert_job(card, fetched_via="extension")
         fake = RecordingMatcher()
-        monkeypatch.setattr(sched, "AIMatcher", lambda **kw: fake)
+        monkeypatch.setattr(sched, "AIMatcher", fake.built)
         monkeypatch.setattr(sched, "send_digest", _no_digest)
         await sched.process_new_jobs(force=True)
         return fake
@@ -274,6 +313,12 @@ async def test_the_extension_path_screens_offices_abroad(ingest):
 
     assert "Product Manager" not in fake.titles_seen
     assert "Delivery Manager" in fake.titles_seen
+
+
+async def test_the_extension_path_judges_against_the_cv_too(ingest):
+    fake = await ingest([_card("Product Operations Specialist", n=1)], cv="AI Engineer | Freelance")
+
+    assert fake.built_with.get("cv_text") == "AI Engineer | Freelance"
 
 
 async def test_the_extension_path_batches_its_title_screens(ingest):

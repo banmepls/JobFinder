@@ -22,9 +22,10 @@ Return ONLY valid JSON, no markdown:
   boilerplate about culture, benefits and equal opportunity — nobody is screened
   out on those.
 - 6 to 12 findings. Cover the real requirements, not every sentence.
-- A required-years demand is judged against "Candidate experience" in the
-  vacancy block when it is stated - the candidate's own figure - not by adding
-  up dates on the resume.
+- A demand for years OVERALL is judged against "Candidate experience" in the
+  vacancy block when it is stated - the candidate's own figure. Years in a
+  SPECIFIC area ("5+ years in fintech") are judged from the resume: add up the
+  lengths of the roles where they did that work, as each heading gives.
 
 "verdict":
   "covered" — the resume or the case bank answers this demand outright.

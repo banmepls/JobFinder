@@ -123,6 +123,15 @@ def _ai(app_settings: dict) -> dict:
             "no_reasoning": providers.no_reasoning(app_settings)}
 
 
+async def scan_cv() -> str:
+    """The CV as every scanning call reads it, '' when none was uploaded.
+
+    One helper for every place a scanning matcher is built, so the scan, the
+    extension's path, the repair script and /api/diag cannot disagree about
+    whether the candidate has a CV."""
+    return (await queries.get_profile_full()).get("resume_text") or ""
+
+
 def _parse_posted(raw) -> "datetime | None":
     """Best-effort parse of a job's posted date from the API sources.
     Handles unix timestamps, ISO 8601 (with 'Z'), and a few common formats."""
@@ -303,7 +312,7 @@ async def run_scan_cycle() -> None:
 
         app_settings = await queries.get_app_settings()
         matcher = AIMatcher(model=providers.resolve_model(app_settings, "fast"),
-                          **_ai(app_settings))
+                          cv_text=await scan_cv(), **_ai(app_settings))
         if matcher.init_error:
             ai_error = matcher.init_error
             logger.error("Matcher unavailable: %s", matcher.init_error)
@@ -672,7 +681,7 @@ async def process_new_jobs(force: bool = False) -> None:
             if new_jobs:
                 app_settings = await queries.get_app_settings()
                 matcher = AIMatcher(model=providers.resolve_model(app_settings, "fast"),
-                          **_ai(app_settings))
+                          cv_text=await scan_cv(), **_ai(app_settings))
                 if matcher.init_error:
                     logger.error("Matcher unavailable: %s", matcher.init_error)
                 profile = await queries.get_profile()

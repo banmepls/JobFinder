@@ -128,7 +128,8 @@ Per card:
 3. **`title_screen_batch`** — 10 titles per call (`matcher.BATCH_SIZE`). Not plausible ⇒ stored with score ≤39,
    "Screened out on title", no description fetch.
 4. **Description** (inline for API sources, `fetch_job_detail` for LinkedIn) + language gate.
-5. **`quick_score`** — instructions + description truncated to `_QUICK_DESC_CHARS=4500`. Sets `scored_at`.
+5. **`quick_score`** — instructions + CV + description truncated to `_QUICK_DESC_CHARS=4500`. Sets `scored_at`.
+   The CV (`AIMatcher(cv_text=…)`, from `scheduler.jobs.scan_cv()`) also reaches the title screen; see §5.
 6. **`advanced`** — on demand only, adds CV + case bank → strengths/weaknesses, may move the score. The page
    runs it as two parallel halves so the verdict paints first: `POST /jobs/{id}/advanced/verdict` (returns the
    rendered `partials/_proscons.html`) and `POST /jobs/{id}/advanced/coverage` (returns JSON: legend,
@@ -184,6 +185,17 @@ English. Both levers were blind to the *requirement*. The fix is deterministic, 
 `language.required_language_missing`, wired into `quick_score` and `_verdict_from_data`. If you ever find a
 blocker the model "should have caught", assume it will not and gate it in code — that is the whole point of
 this section.
+
+⚠️ **The scanning stages read the CV** (28 Oct 2026). Before, the title screen and quick score had only the
+instructions — and on 22 real adverts with EMPTY instructions every one scored 80–100, accountants and inside
+sales included. Now `AIMatcher(cv_text=…)` adds a `=== CANDIDATE CV` block after the instructions in the SYSTEM
+message (cached prefix, ~1 100 tokens for a two-page CV); `scan_cv()` is the one source, and a structural test
+fails if a scanning `AIMatcher(...)` is built without `cv_text`. **Never fold the CV into `instructions`**: the
+gates parse those for languages and countries. The prompt treats the CV as evidence of what they have done,
+never as a rule. Same 22 adverts with the CV: 13 in To review instead of 22, wrong-field roles at 10–30,
+leadership/AI roles 85–95, a role in another city ~55–65 (soft). **3.1 Flash-Lite still turned the CV's city
+into `blocker=true`** despite the prompt saying not to, so `_apply_blocker` now **ignores a model blocker when
+the instructions are empty** — no rule was stated, none can be broken. With any instructions it caps as before.
 
 ⚠️ **Do not re-add a code-side seniority *verifier*.** One was built and removed the same day; it rested on the
 belief the model confabulated a "ceiling of 4 years" — the user's instructions literally say that. The cure is a
@@ -414,6 +426,10 @@ two-page CV: 26 of 60 facts reached the AI; after the fix 55, the other five bei
 (never sent) and a company-wide date span the per-role dates cover. Company one-liners now have a slot,
 `p.entry-desc` (also named in `_CV_CHAT_SYSTEM`, or an edit strips it); without one the model dropped all
 three. **A new class in either CV prompt must be read by `cv_to_text`**, or the AI silently loses it.
+Each entry heading now also carries its length, "(1 yr 7 mos)", computed by `cv_content.date_span` — month
+names, MM/YYYY, bare years, "Present". Years across roles go through `years_in`, which counts overlapping
+months once and returns **None, never 0**, when no date can be read: a zero would mark every advert asking for
+experience as out of reach through the years gate.
 
 **Cover-letter brief** — a per-job note ("mention my Shopify work"), stored in `job_assets` under
 `cl_brief`; not in `gen.KINDS`, so it never becomes a tab. Prepended to `_context()` as highest priority,

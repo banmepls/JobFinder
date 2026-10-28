@@ -225,6 +225,36 @@ def test_a_heading_with_no_date_is_still_read():
     assert "Freelance | Lisbon 2026" in cv_to_text(head)
 
 
+def test_each_role_says_how_long_it_lasted():
+    """Lengths are counted here, not asked of the model, which read eight years
+    as short of "5+" when left to count dates itself."""
+    from datetime import date
+
+    text = cv_to_text(_TWO_JOBS, today=date(2026, 10, 28))
+
+    assert "2021 – Present (5 yrs 10 mos)" in text
+    assert "2018 – 2021 (3 yrs)" in text
+
+
+def test_overlapping_roles_count_once_and_unknown_dates_are_not_zero():
+    """Three roles at one company overlap at their edges; counted twice they
+    would inflate the years. And a date nobody can read is unknown, not zero:
+    a search set to zero years would lower every advert asking for any."""
+    from datetime import date
+
+    from cv_content import date_span, months_in, years_in
+
+    today = date(2026, 10, 28)
+    promoted = [date_span(s, today) for s in
+                ("Jan 2025 – Jul 2026", "Oct 2023 – Jan 2025", "Feb 2023 – Oct 2023")]
+    side_job = [date_span(s, today) for s in ("Jan 2020 – Dec 2021", "Jan 2021 – Dec 2022")]
+
+    assert months_in(promoted) == 42     # Feb 2023 - Jul 2026; summed it is 44
+    assert years_in(side_job) == 3       # three years of calendar; summed it is four
+    assert years_in([date_span("Freelance, on and off", today)]) is None
+    assert years_in([]) is None
+
+
 def test_a_company_description_has_a_place_and_reaches_the_ai():
     """The import prompt gave a company's one-line description nowhere to go, and
     on a real CV the model dropped all three despite being told to keep every

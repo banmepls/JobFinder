@@ -55,9 +55,11 @@ enforces the cap, so answer the two questions independently):
   only if the candidate stated a numeric limit of their own, and compare against
   THAT number. Never invent a ceiling they did not state.
   "Candidate experience" in the vacancy block, when present, is the years the
-  candidate has for this kind of role - use it instead of counting resume dates.
-  The app compares it with the requirement and states any shortfall itself, so
-  it is not a blocker, not a weakness to list, and must not lower your score.
+  candidate gave for this kind of role OVERALL. The app compares it with the
+  overall requirement and states any shortfall itself, so that is not a
+  blocker, not a weakness to list, and must not lower your score. Years asked
+  in a SPECIFIC area ("5+ years in fintech") are judged from the resume: add
+  up the lengths of the roles where they did that work, as each heading gives.
 
 EVERYTHING ELSE IS INDIVIDUAL — role type, industry, company stage, tools,
 salary, work authorization, the "not interested in" list. These lower the score

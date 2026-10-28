@@ -1996,9 +1996,11 @@ async def diag():
         "model_advanced": _deep_model(app_settings),
         "advanced_runs_on": providers.provider_for(app_settings, providers.WRITE).label,
     }
-    # Diagnoses the SCANNING endpoint, which is the one a scan depends on.
+    # Diagnoses the SCANNING endpoint, which is the one a scan depends on -
+    # with the CV, as the scan sends it.
+    from scheduler.jobs import scan_cv
     matcher = AIMatcher(model=_fast_model(app_settings),
-                        **_ai(app_settings))
+                        cv_text=await scan_cv(), **_ai(app_settings))
     if matcher.init_error:
         info["ok"] = False
         info["error"] = matcher.init_error

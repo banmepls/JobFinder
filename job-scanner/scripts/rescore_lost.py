@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import providers  # noqa: E402
 from db import conn, queries  # noqa: E402
 from matcher import AIMatcher  # noqa: E402
+from scheduler.jobs import scan_cv  # noqa: E402
 
 # The signature of the failure: a zero with no reason and no flags. A genuine
 # zero from the model carries a summary, because the prompt demands one.
@@ -71,6 +72,7 @@ async def main() -> int:
         api_key=key, base_url=provider.base_url,
         reasoning_reserve=provider.reasoning_reserve,
         timeout=provider.timeout, no_reasoning=providers.no_reasoning(settings_row),
+        cv_text=await scan_cv(),
     )
 
     scored = failed = 0

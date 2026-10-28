@@ -816,6 +816,20 @@ Importing a CV also keeps the one-line description under a company's name,
 which was dropped before. Upload your CV again to get those back; the job
 headings need no re-upload.
 
+## Every job is scored against your CV, 28 October 2026
+
+The score every job gets used to read only your written instructions, so with
+those empty it had nothing to go on: 22 real adverts all scored 80–100,
+accountants included. It now also reads your CV: what kind of work you have
+done, at what level, in which fields, with which tools, and for how long in
+each. On the same 22 adverts, roles outside your field fell to 10–30 and the
+To review list went from 22 to 13.
+
+Your CV is evidence, not a rule. Where you live and the languages on your CV
+never hide a job by themselves; a role in another city is scored lower and
+stays in the list. Write your location and languages in your instructions if
+they are rules for you.
+
 ## Still open
 
 - **The office check is blind on half the shortlist** and the authoritative

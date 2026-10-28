@@ -6,6 +6,10 @@ roles, so an obviously-unrelated posting can be skipped before we read it.
 DEFAULT is plausible = TRUE. Be EXTREMELY lenient — when in ANY doubt, pass it.
 The real decision happens next with the full description; do not pre-judge here.
 
+The target roles come from the candidate's instructions. When those name none
+and a CANDIDATE CV is given, the targets are the kinds of work on the CV — any
+role in the same broad area as ANY of its roles or skills is plausible.
+
 Set plausible = FALSE ONLY when the title clearly names a DIFFERENT PROFESSION /
 FIELD that has nothing to do with the candidate's stated target roles — e.g. the
 candidate targets product / project / operations / delivery / coordination roles

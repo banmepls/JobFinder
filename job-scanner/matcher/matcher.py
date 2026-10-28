@@ -195,10 +195,17 @@ class AIMatcher:
     def __init__(self, model: str | None = None, api_key: str | None = None,
                  advanced_model: str | None = None, base_url: str | None = None,
                  reasoning_reserve: int = 0, timeout: float | None = None,
-                 no_reasoning: dict | None = None) -> None:
+                 no_reasoning: dict | None = None, cv_text: str = "") -> None:
         # Room the model needs to think before it writes. Zero for models that
         # answer directly; see providers.Provider.reasoning_reserve.
         self.reserve = max(0, int(reasoning_reserve))
+        # The CV as the scanning stages read it (cv_content.cv_to_text). Its own
+        # block, never folded into the instructions: the gates parse those for
+        # languages and countries, and a language a CV merely mentions is not
+        # one the candidate asked to work in. Measured 28 Oct 2026: with
+        # empty instructions and no CV, 22 of 22 real adverts scored 80-100 -
+        # accountants and inside sales included.
+        self.cv_text = (cv_text or "").strip()
         self.timeout = float(timeout or _REQUEST_TIMEOUT)
         # Applied to the scanning stages only. The deep check is a handful of
         # calls a day and is the one place the thinking is worth paying for.
@@ -230,6 +237,16 @@ class AIMatcher:
                 self.init_error = f"OpenAI client init failed: {exc}"
                 logger.error(self.init_error)
 
+    def _cv_block(self) -> str:
+        """The CV for the scanning prompts, or nothing when there is none - the
+        prompts then read exactly as they did before a CV could be given. Sits
+        after the instructions in the SYSTEM message: identical for every job,
+        so it rides in the cached prefix rather than being billed per job."""
+        if not self.cv_text:
+            return ""
+        return ("\n=== CANDIDATE CV (what they have done; each role heading gives "
+                f"its dates and length) ===\n{self.cv_text}\n")
+
     # ------------------------------------------------------------------ #
     # Stage 0 - title screen (title + metadata only, no description)      #
     # ------------------------------------------------------------------ #
@@ -248,7 +265,7 @@ class AIMatcher:
         system = _read("title.txt") + (
             "\n\n=== CANDIDATE INSTRUCTIONS ===\n"
             f"{(instructions or '').strip() or '(none)'}\n"
-        )
+        ) + self._cv_block()
         user = (
             "=== JOB (title/metadata only) ===\n"
             f"Title: {job.get('title')}\n"
@@ -310,6 +327,7 @@ class AIMatcher:
         system = _read("title.txt") + (
             "\n\n=== CANDIDATE INSTRUCTIONS ===\n"
             f"{(instructions or '').strip() or '(none)'}\n"
+        ) + self._cv_block() + (
             "\nYou will be given several jobs at once, numbered. Judge each one "
             "independently and answer for every number you were given.\n"
             'Reply with JSON: {"results": [{"n": 1, "plausible": true, '
@@ -396,7 +414,7 @@ class AIMatcher:
         system = _read("quick.txt") + (
             "\n\n=== CANDIDATE INSTRUCTIONS (preferences, must-haves, hard excludes) ===\n"
             f"{(instructions or '').strip() or '(none)'}\n"
-        )
+        ) + self._cv_block()
         user = _vacancy_block(job, max_chars=_QUICK_DESC_CHARS)
         try:
             resp = await self._client.chat.completions.create(
@@ -672,6 +690,16 @@ def _apply_blocker(score: int, data: dict[str, Any], job: dict[str, Any],
     if not _is_blocker(data):
         return score
     reason = str(data.get("blocker_reason") or "unspecified").strip().lower()
+    # No instructions, no rules, nothing to break. With the CV in the prompt
+    # the model knows where the candidate lives and what they speak, and it
+    # turned those facts into blockers despite being told not to - measured 28
+    # Oct 2026 on 22 real adverts, an on-site Berlin role it called "a strong
+    # technical and leadership fit" came back capped at 25. The model's score is
+    # already "as if every constraint were met", so it stands.
+    if not (instructions or "").strip():
+        logger.info("Blocker (%s) on %.60s ignored — the instructions state no rules",
+                    reason, job.get("title") or "")
+        return score
     logger.info("Blocker (%s) on %.60s — score %d capped",
                 reason, job.get("title") or "", score)
     return min(score, 25)

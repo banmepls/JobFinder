@@ -153,13 +153,28 @@ def test_no_blocker_leaves_the_score_alone():
     assert _apply_blocker(85, {}, JOB) == 85
 
 
+STATED = "Remote in the EU only. English-speaking teams."
+
+
 def test_blocker_caps_below_the_review_threshold():
-    capped = _apply_blocker(90, {"blocker": True, "blocker_reason": "location"}, JOB)
+    capped = _apply_blocker(90, {"blocker": True, "blocker_reason": "location"}, JOB, STATED)
     assert capped == 25
 
 
 def test_blocker_never_raises_a_low_score():
-    assert _apply_blocker(10, {"blocker": True, "blocker_reason": "language"}, JOB) == 10
+    assert _apply_blocker(10, {"blocker": True, "blocker_reason": "language"}, JOB, STATED) == 10
+
+
+def test_with_no_instructions_a_claimed_blocker_cannot_hide_a_job():
+    """No rule was stated, so none can be broken. Given the CV, the model turned
+    where the candidate lives into blockers anyway: measured on 22 real adverts,
+    an on-site Berlin role it called "a strong technical and leadership fit"
+    came back capped at 25, out of the review list."""
+    claimed = {"blocker": True, "blocker_reason": "location"}
+
+    assert _apply_blocker(85, claimed, JOB, "") == 85
+    assert _apply_blocker(85, claimed, JOB, "   ") == 85
+    assert _apply_blocker(85, claimed, JOB) == 85
 
 
 @pytest.mark.parametrize("raw,expected", [
