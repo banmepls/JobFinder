@@ -325,6 +325,15 @@ scanning model** — that test is the guard, keep it passing rather than deletin
 `weworkremotely` (RSS, 100 newest, **keywords filtered on TITLE only** — matching the description returned a
 Head of Marketing for "product") · `eu_boards` · `arbeitsagentur` · `platsbanken`.
 
+**A keyword must START a word** (6 Nov 2026). Every board that filters on our side uses one function,
+`scrapers.base.kw_matches` (api_sources and ats import it; there were two copies). It was a plain substring test:
+a skills search for "RPA" brought back an M&A internship ("ve**rpa**sst"), "BPM" a pain clinic ("(c**bpm**)"),
+"LLM" an infrastructure job ("fu**llm**ent") — 4 of 13. Now `(?<!\w)` + the word: a prefix still matches
+("engineer" finds "engineering"), punctuation is an edge ("(RPA)", "RPA-based"). **Remotive's own `search` is
+fuzzy** ("Head of Engineering" → a freelance writer), so its results now pass the same test. Same searches
+after: all 10 accidents gone, every real match kept. ⚠️ A whole-word rule would lose "engineering" for
+"engineer" — `tests/test_keyword_matching.py` pins both directions.
+
 **`eu_boards` (`ats.py` + `registry/eu_boards.json`)** — Greenhouse/Lever/Ashby/Personio/Teamtailor/Recruitee/
 SmartRecruiters expose one key-free JSON per **company**, so coverage is a list of verified slugs, not a query.
 The list call carries the full description (except SmartRecruiters, which needs one fetch per posting and is
@@ -378,6 +387,12 @@ the structural writers test) for one search per aspect of the CV, with the numbe
 the years are counted in code (`cv_content.years_in`) from those entries' dates, and the page only shows them.
 `POST /search/suggest/save` creates the ticked ones and never touches existing searches. Both are registered
 **before** `/search/{search_id}`, which would take "suggest" as an id and answer 422.
+Two kinds since 6 Nov 2026: `role` (titles, at least one the candidate has not held) and `skills` (distinctive
+tools/platforms/regulations as keywords, so a search finds any advert asking for them whatever its title).
+⚠️ **A skills search gets no years figure.** The years gate compares it with the years an advert asks for
+OVERALL; a skills search came back set to 0, which would have held every "3+ years" role it found at 55.
+Scoring needed no change for this: with the CV, other-titled roles using the candidate's skills already scored
+85–95 on real adverts (measured before deciding).
 
 The personal assistant tab (`/chat`, `assistant/`, `/api/transcribe`) was removed when the code was opened
 (19 Oct 2026). It drove the local Claude CLI and never had a page; `/cv/chat` and `/jobs/{id}/letter/chat` are

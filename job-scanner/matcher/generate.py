@@ -108,14 +108,28 @@ _SEARCH_SUGGEST_SYSTEM = (
     "The CV's work entries are numbered [1], [2], …; each heading gives the role, "
     "company, dates and length.\n"
     "Return ONLY valid JSON:\n"
-    '{"searches": [{"name": "...", "keywords": ["...", "..."], "entries": [1, 3], '
-    '"why": "..."}]}\n'
-    "- 3 to 5 searches, fewer if the CV really has fewer aspects. No two may "
+    '{"searches": [{"kind": "role", "name": "...", "keywords": ["...", "..."], '
+    '"entries": [1, 3], "why": "..."}]}\n'
+    "Two kinds of search:\n"
+    '- kind "role": 3 to 5 searches by job title, fewer if the CV really has fewer '
+    "aspects. Not only titles like theirs: at least one must be a role they have "
+    "NOT held whose core work clearly uses what the CV shows (for example a "
+    "solutions architect for an engineer who works with clients). No two may "
     "cover the same ground.\n"
-    "- name: 2 to 4 words naming the aspect.\n"
-    "- keywords: 2 to 4 job titles exactly as employers write them in adverts, "
-    "each one searched on its own. At the level the CV shows, no locations, and "
-    "no level words such as Senior or Lead that the CV does not support.\n"
+    '- kind "skills": 2 searches whose keywords are SKILLS, not titles - '
+    "distinctive tools, platforms, methods or regulations from the CV - so the "
+    "search finds any advert that asks for them, whatever it is called. Group "
+    "related skills in one search (for example one for automation tools, one for "
+    "a platform or a regulation); one search only if the CV has too few. Each "
+    "keyword must be specific enough to rarely appear by chance (for example "
+    "Salesforce, Terraform, SOX compliance). Never broad words such as Python, "
+    "AI, Agile, cloud, leadership or management: they appear in nearly every "
+    "advert.\n"
+    "- name: 2 to 4 words naming the aspect or the skill set.\n"
+    "- keywords: 2 to 4 per search, each one searched on its own. For a role "
+    "search, job titles exactly as employers write them in adverts, at the level "
+    "the CV shows, no locations, and no level words such as Senior or Lead that "
+    "the CV does not support.\n"
     "- entries: the numbers of the work entries where they actually did this "
     "kind of work. The app counts their years in this aspect from these entries' "
     "dates, so include an entry only when its work is clearly of this kind. "
@@ -130,9 +144,10 @@ def _clean_suggestions(data: Any, n_entries: int) -> list[dict]:
     is dropped rather than trusted - the years are counted from these."""
     out: list[dict] = []
     items = data.get("searches") if isinstance(data, dict) else None
-    for item in (items if isinstance(items, list) else [])[:6]:
+    for item in (items if isinstance(items, list) else [])[:8]:
         if not isinstance(item, dict):
             continue
+        kind = "skills" if str(item.get("kind") or "").strip().lower() == "skills" else "role"
         name = " ".join(str(item.get("name") or "").split())[:60]
         keywords: list[str] = []
         for raw in item.get("keywords") or []:
@@ -142,9 +157,12 @@ def _clean_suggestions(data: Any, n_entries: int) -> list[dict]:
         entries = sorted({int(e) for e in item.get("entries") or []
                           if str(e).strip().isdigit() and 1 <= int(e) <= n_entries})
         if name and keywords:
-            out.append({"name": name, "keywords": keywords[:4], "entries": entries,
+            out.append({"kind": kind, "name": name, "keywords": keywords[:4],
+                        "entries": entries,
                         "why": " ".join(str(item.get("why") or "").split())[:200]})
-    return out
+    # Title searches first: they are the familiar kind, and the skills ones read
+    # better next to them as "and also".
+    return sorted(out, key=lambda s: s["kind"] == "skills")
 
 
 async def suggest_searches(cv_text: str, n_entries: int, model: str | None = None,

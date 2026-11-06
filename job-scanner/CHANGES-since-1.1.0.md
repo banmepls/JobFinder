@@ -838,6 +838,19 @@ with the job titles to search for and your years in that area, counted from the
 dates of the roles that show it. You review and edit each one before anything is
 saved.
 
+## Searches by skill, not only by job title, 6 November 2026
+
+**Suggest from my CV** now also proposes searches built from your skills - the
+tools, platforms and methods on your CV - which find any job that asks for them,
+whatever it is called. Its title searches include at least one kind of role you
+have not held but whose work uses what you know.
+
+Search keywords are also stricter where the app filters results itself: a word
+must start a word in the advert. "RPA" used to match the German "verpasst" and
+"LLM" the word "fulfillment", bringing back internships and clinic jobs. The
+same searches now return only real matches, and Remotive's loose search is held
+to the same rule.
+
 ## Still open
 
 - **The office check is blind on half the shortlist** and the authoritative

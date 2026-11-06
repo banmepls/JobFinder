@@ -64,6 +64,25 @@ def strip_html(markup: str | None) -> str:
     return "\n".join(ln.strip() for ln in text.splitlines() if ln.strip()).strip()
 
 
+def kw_matches(query: str, *fields: str) -> bool:
+    """True if every word of the query STARTS a word somewhere in the fields.
+
+    At the start of a word, not anywhere inside one. A plain substring test let
+    "rpa" match the German "verpasst", "bpm" a medicines code "(cbpm)" and "llm"
+    "fulfillment": 4 of the 13 adverts a skills search brought back on 6 Nov
+    2026 were such accidents, each costing a model call. A prefix still
+    matches - "engineer" finds "Engineers" and "engineering" - and punctuation
+    is a word edge, so "(RPA)" and "RPA-based" match.
+
+    One copy for every board that filters on its own side; there used to be
+    two, which is how drift starts."""
+    words = (query or "").lower().split()
+    if not words:
+        return True
+    hay = " ".join(f.lower() for f in fields if f)
+    return all(re.search(r"(?<!\w)" + re.escape(w), hay) for w in words)
+
+
 @dataclass
 class JobListing:
     """Normalized vacancy record produced by the extension / ingest endpoint."""

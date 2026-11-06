@@ -1561,7 +1561,13 @@ async def search_suggest(request: Request):
             model=_write_model(app_settings), **_writer_client(app_settings))
     for p in proposals:
         chosen = [entries[i - 1] for i in p["entries"]]
-        p["years"] = cv_content.years_in(e["span"] for e in chosen)
+        # Not for a skills search. The years gate compares this figure with the
+        # years an advert asks for OVERALL, and a skills search finds roles of
+        # every kind: months with one tool would hold a 3-years AI role at 55,
+        # below To review - hiding exactly what the search is for. The score
+        # already weighs years in a specific area from the CV.
+        p["years"] = (None if p.get("kind") == "skills"
+                      else cv_content.years_in(e["span"] for e in chosen))
         p["based_on"] = [e["heading"] for e in chosen]
     searches = await queries.list_searches()       # newest first
     return templates.TemplateResponse(request, "search_suggest.html", {

@@ -42,6 +42,7 @@ from bs4 import BeautifulSoup
 
 from config import settings
 from scrapers.base import JobListing, strip_html
+from scrapers.base import kw_matches as _kw_matches
 
 logger = logging.getLogger(__name__)
 
@@ -100,15 +101,6 @@ def _epoch_ms_to_iso(value: Any) -> str | None:
         return datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc).isoformat()
     except (TypeError, ValueError, OSError, OverflowError):
         return None
-
-
-def _kw_matches(query: str, *fields: str) -> bool:
-    """True if every word of the query appears somewhere in the fields."""
-    words = (query or "").lower().split()
-    if not words:
-        return True
-    hay = " ".join(f.lower() for f in fields if f)
-    return all(w in hay for w in words)
 
 
 # Geography markers. The registry holds European *companies*, but they hire

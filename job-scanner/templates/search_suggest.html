@@ -30,7 +30,8 @@
   <input type="hidden" name="job_types" value="{{ base.job_types }}">
   <input type="hidden" name="remote" value="{{ base.remote }}">
 
-  <p class="hint">One search for each area of your CV. Untick the ones you don't
+  <p class="hint">Searches by job title for each area of your CV, and searches by
+    skill that find any job asking for what you know. Untick the ones you don't
     want and edit the rest: nothing is saved until you press Create.</p>
 
   {% for p in proposals %}{% set i = loop.index0 %}
@@ -38,8 +39,14 @@
     <label class="check">
       <input type="checkbox" name="include_{{ i }}" value="1" checked>
       <strong>Create this search</strong>
+      {% if p.kind == 'skills' %}<span class="tag">Skills search</span>{% endif %}
     </label>
     {% if p.why %}<p class="hint">{{ p.why }}</p>{% endif %}
+    {% if p.kind == 'skills' %}
+    <p class="hint" data-kind="skills">Finds any advert that asks for these skills,
+      whatever the job is called. WeWorkRemotely and the company boards match job
+      titles only, so they won't find these.</p>
+    {% endif %}
 
     <div class="field">
       <label for="name_{{ i }}">Search name</label>
@@ -47,16 +54,19 @@
     </div>
 
     <div class="field">
-      <label for="keywords_{{ i }}">Keywords / roles</label>
-      <p class="hint">One role per line. Each one is searched on every source, so
-        fewer lines means a faster scan.</p>
+      <label for="keywords_{{ i }}">{% if p.kind == 'skills' %}Skills{% else %}Keywords / roles{% endif %}</label>
+      <p class="hint">{% if p.kind == 'skills' %}One skill per line, each specific enough
+        not to appear in every advert.{% else %}One role per line.{% endif %} Each one is
+        searched on every source, so fewer lines means a faster scan.</p>
       <textarea id="keywords_{{ i }}" name="keywords_{{ i }}" rows="4">{{ p.keywords|join('\n') }}</textarea>
     </div>
 
     <div class="grid cols-2">
       <div class="field">
         <label for="years_{{ i }}">Your years of experience</label>
-        <p class="hint">{% if p.years is not none %}Counted from the dates of the roles
+        <p class="hint">{% if p.kind == 'skills' %}Best left empty: a skills search finds
+          roles of every kind, and the score already weighs your years per area from
+          your CV.{% elif p.years is not none %}Counted from the dates of the roles
           below.{% else %}No dates could be read for this area. Leave it empty to
           ignore years.{% endif %}</p>
         <input type="number" id="years_{{ i }}" name="years_{{ i }}" min="0" max="50"

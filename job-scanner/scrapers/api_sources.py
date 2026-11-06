@@ -32,6 +32,7 @@ import httpx
 
 from config import settings
 from scrapers.base import JobListing, strip_html
+from scrapers.base import kw_matches as _kw_matches
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +46,6 @@ def _with_wp(location: str | None, workplace: str | None) -> str | None:
     if not wp:
         return loc or None
     return loc if wp.lower() in loc.lower() else (f"{loc} ({wp})" if loc else wp)
-
-
-def _kw_matches(query: str, *fields: str) -> bool:
-    """True if every word of the query appears somewhere in the fields."""
-    q = (query or "").lower().split()
-    if not q:
-        return True
-    hay = " ".join(f.lower() for f in fields if f)
-    return all(w in hay for w in q)
 
 
 
@@ -85,13 +77,20 @@ async def iter_remotive(cfg: dict):
         logger.warning("[remotive] failed: %s", exc)
         return
     for j in jobs[:max_jobs]:
+        # Remotive's own search is loose: "RPA" brought back an AI video
+        # annotation job that never mentions it, "Head of Engineering" a
+        # freelance writer. Held to the same word test as every other board.
+        description = strip_html(j.get("description", ""))
+        if not _kw_matches(keywords, j.get("title") or "", description,
+                           " ".join(j.get("tags") or []), j.get("category") or ""):
+            continue
         yield JobListing(
             source="remotive",
             external_id=str(j.get("id")),
             title=j.get("title") or "(no title)",
             company=j.get("company_name"),
             location=_with_wp(j.get("candidate_required_location") or "Remote", _REMOTE_ONLY),
-            description=strip_html(j.get("description", "")),
+            description=description,
             url=j.get("url"),
             posted_at=j.get("publication_date"),
             employment_type=_employment(j.get("job_type")),

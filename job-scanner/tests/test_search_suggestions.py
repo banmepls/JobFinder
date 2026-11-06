@@ -88,4 +88,72 @@ def test_a_role_number_the_cv_does_not_have_is_dropped():
                         {"name": "", "keywords": ["CTO"], "entries": [1]}]}
 
     assert gen._clean_suggestions(raw, n_entries=3) == [
-        {"name": "AI", "keywords": ["AI Engineer"], "entries": [1, 2], "why": "Built bots."}]
+        {"kind": "role", "name": "AI", "keywords": ["AI Engineer"], "entries": [1, 2],
+         "why": "Built bots."}]
+
+
+def test_skills_searches_are_kept_and_follow_the_title_ones():
+    """A skills search finds adverts by what they ask for, not what they are
+    called. An unknown kind is a title search, the familiar one."""
+    raw = {"searches": [
+        {"kind": "skills", "name": "Process tools", "keywords": ["RPA", "BPM"], "entries": [1]},
+        {"kind": "role", "name": "Leadership", "keywords": ["CTO"], "entries": [1]},
+        {"kind": "mystery", "name": "Delivery", "keywords": ["Delivery Lead"], "entries": [1]},
+    ]}
+
+    got = gen._clean_suggestions(raw, n_entries=1)
+
+    assert [(s["kind"], s["name"]) for s in got] == [
+        ("role", "Leadership"), ("role", "Delivery"), ("skills", "Process tools")]
+
+
+async def test_the_review_page_says_which_searches_are_by_skill(db, monkeypatch):
+    """Two boards match titles only and will not find a skill; the page says so
+    on the skills searches, and only there."""
+    from fastapi.testclient import TestClient
+
+    import main
+
+    await db.save_cv_html(_CV, set_original=True)
+
+    async def fake_suggest(cv_text, n_entries, **kw):
+        return [{"kind": "role", "name": "Leadership", "keywords": ["CTO"], "entries": [1], "why": ""},
+                {"kind": "skills", "name": "Process tools", "keywords": ["RPA", "BPM"],
+                 "entries": [2], "why": ""}]
+
+    monkeypatch.setattr(gen, "suggest_searches", fake_suggest)
+    with TestClient(main.app) as client:
+        html = client.post("/search/suggest").text
+
+    assert html.count('data-kind="skills"') == 1
+    assert html.index("Leadership") < html.index('data-kind="skills"')
+
+
+async def test_a_skills_search_starts_without_a_years_figure(db, monkeypatch):
+    """The years gate compares a search's figure with the years an advert asks
+    for overall, and a skills search finds roles of every kind. Measured on a
+    real CV: a skills search came back set to 0 years, which would have held
+    every "3+ years" role it found at 55 - below To review, hidden by the very
+    search meant to find it."""
+    import re
+
+    from fastapi.testclient import TestClient
+
+    import main
+
+    await db.save_cv_html(_CV, set_original=True)
+
+    async def fake_suggest(cv_text, n_entries, **kw):
+        return [{"kind": "role", "name": "Leadership", "keywords": ["CTO"], "entries": [1], "why": ""},
+                {"kind": "skills", "name": "Process tools", "keywords": ["RPA", "BPM"],
+                 "entries": [2], "why": ""}]
+
+    monkeypatch.setattr(gen, "suggest_searches", fake_suggest)
+    with TestClient(main.app) as client:
+        html = client.post("/search/suggest").text
+
+    def years(i: int) -> str:
+        return re.search(rf'name="years_{i}"[^>]*value="([^"]*)"', html).group(1)
+
+    assert years(0) == "2", "a title search still counts its roles' years"
+    assert years(1) == "", "a skills search must not carry a years figure"
