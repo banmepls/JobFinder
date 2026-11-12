@@ -1326,3 +1326,155 @@ async def record_extension_state(state: str, error: str = "", version: str = "",
             (state, (error or "")[:200], version or "", _utc_now_iso(),
              run_at or "", PROFILE_ID))
         await db.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Swiss companies from the commercial register - the hidden job market         #
+# --------------------------------------------------------------------------- #
+
+async def add_companies(rows: list[dict[str, Any]]) -> int:
+    """Store companies found in the register. Returns how many were new.
+
+    INSERT OR IGNORE, never an upsert: a company found again keeps its ranking,
+    its website and above all what the user decided about it. A re-run that
+    reset "dismissed" would hand back every company the user already said no to."""
+    async with conn.connect() as db:
+        cur = await db.executemany(
+            "INSERT OR IGNORE INTO companies "
+            "(uid, name, legal_form, town, canton, purpose, country, postcode, website, "
+            "website_proof, site_languages, found_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(r["uid"], r["name"], r.get("legal_form"), r.get("town"), r.get("canton"),
+              r.get("purpose"), r.get("country") or "CH", r.get("postcode"), r.get("website"),
+              r.get("website_proof"), r.get("site_languages"), _utc_now_iso()) for r in rows])
+        await db.commit()
+        return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+
+async def list_companies(include_dismissed: bool = False) -> list[dict[str, Any]]:
+    """Best fit first; companies not ranked yet last."""
+    where = "" if include_dismissed else "WHERE status != 'dismissed'"
+    async with conn.connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            f"SELECT * FROM companies {where} "
+            "ORDER BY fit IS NULL, fit DESC, name")
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def known_company_uids(uids: list[str]) -> set[str]:
+    """Which of these companies are stored already - so a run does not fetch
+    the homepage of a company it has read before."""
+    if not uids:
+        return set()
+    async with conn.connect() as db:
+        cur = await db.execute(
+            f"SELECT uid FROM companies WHERE uid IN ({','.join('?' * len(uids))})", uids)
+        return {row[0] for row in await cur.fetchall()}
+
+
+async def get_company(uid: str) -> dict[str, Any] | None:
+    async with conn.connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM companies WHERE uid = ?", (uid,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def unranked_companies(limit: int = 1000) -> list[dict[str, Any]]:
+    async with conn.connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM companies WHERE fit IS NULL AND status = 'found' "
+            "ORDER BY found_at LIMIT ?", (limit,))
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def save_company_fit(uid: str, fit: int, reason: str) -> None:
+    async with conn.connect() as db:
+        await db.execute("UPDATE companies SET fit = ?, fit_reason = ? WHERE uid = ?",
+                         (fit, reason, uid))
+        await db.commit()
+
+
+async def companies_to_check(min_fit: int, limit: int = 100) -> list[dict[str, Any]]:
+    """Ranked well enough to be worth a look at their website, not looked at yet."""
+    async with conn.connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM companies WHERE checked_at IS NULL AND status != 'dismissed' "
+            "AND fit >= ? ORDER BY fit DESC LIMIT ?", (min_fit, limit))
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def save_company_check(uid: str, website: str | None, proof: str | None,
+                             careers_url: str | None, openings: int | None,
+                             open_applications: bool | None, *,
+                             site_languages: str | None = None,
+                             careers_language: str | None = None) -> None:
+    """What the website check found. Written once per company - `checked_at`
+    is what keeps the next run from fetching the same site again."""
+    async with conn.connect() as db:
+        await db.execute(
+            "UPDATE companies SET website = ?, website_proof = ?, careers_url = ?, "
+            "openings = ?, open_applications = ?, site_languages = ?, careers_language = ?, "
+            "checked_at = ? WHERE uid = ?",
+            (website, proof, careers_url, openings,
+             None if open_applications is None else int(open_applications),
+             site_languages, careers_language, _utc_now_iso(), uid))
+        await db.commit()
+
+
+async def save_company_languages(codes: list[str]) -> None:
+    """The languages the user ticked on the Companies page. An empty list is a
+    choice too - no filter - and is stored as '' rather than NULL."""
+    async with conn.connect() as db:
+        await db.execute("UPDATE app_settings SET company_languages = ? WHERE id = ?",
+                         (",".join(codes), PROFILE_ID))
+        await db.commit()
+
+
+async def set_company_status(uid: str, status: str, job_id: int | None = None) -> None:
+    async with conn.connect() as db:
+        await db.execute(
+            "UPDATE companies SET status = ?, job_id = COALESCE(?, job_id) WHERE uid = ?",
+            (status, job_id, uid))
+        await db.commit()
+
+
+async def save_company_countries(countries: list[str]) -> None:
+    """The countries a company search covers, as ticked on the Companies page."""
+    async with conn.connect() as db:
+        await db.execute("UPDATE app_settings SET company_countries = ? WHERE id = ?",
+                         (",".join(countries), PROFILE_ID))
+        await db.commit()
+
+
+async def save_company_offsets(offsets: dict[str, int]) -> None:
+    """How far through each country's map offices the last run got."""
+    async with conn.connect() as db:
+        await db.execute("UPDATE app_settings SET company_offsets = ? WHERE id = ?",
+                         (json.dumps(offsets, sort_keys=True), PROFILE_ID))
+        await db.commit()
+
+
+async def save_company_auto(every: str) -> None:
+    """'' (off), 'daily' or 'weekly' - how often the company search runs by itself."""
+    async with conn.connect() as db:
+        await db.execute("UPDATE app_settings SET company_auto = ? WHERE id = ?", (every, PROFILE_ID))
+        await db.commit()
+
+
+async def save_company_last_run(started_at: str) -> None:
+    async with conn.connect() as db:
+        await db.execute("UPDATE app_settings SET company_last_run = ? WHERE id = ?",
+                         (started_at, PROFILE_ID))
+        await db.commit()
+
+
+async def save_company_search(terms: str, offset: int) -> None:
+    async with conn.connect() as db:
+        await db.execute(
+            "UPDATE app_settings SET company_terms = ?, company_offset = ? WHERE id = ?",
+            (terms, offset, PROFILE_ID))
+        await db.commit()

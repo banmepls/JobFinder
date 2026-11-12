@@ -129,13 +129,81 @@ def accepted_languages(instructions: str | None) -> set[str]:
 def violates(description: str | None, instructions: str | None) -> str | None:
     """Name of the description's language when the candidate did not list it -
     i.e. a hard language blocker. None when there is no violation (or no call)."""
-    accepted = accepted_languages(instructions)
+    return _written_in_other(description, accepted_languages(instructions))
+
+
+def _written_in_other(description: str | None, accepted: set[str]) -> str | None:
     if not accepted:
         return None
     code = detect(description)
     if code is None or code in accepted:
         return None
     return name(code)
+
+
+def blocker(description: str | None, accepted: set[str]) -> str | None:
+    """Name of the language that shuts the candidate out of this advert - it is
+    written in it, or demands it - judged against a set of language codes rather
+    than the instructions' wording. None when `accepted` is empty."""
+    return _written_in_other(description, accepted) or _required_missing(description, accepted)
+
+
+# --------------------------------------------------------------------------- #
+# The company search: which languages the CV lists                             #
+# --------------------------------------------------------------------------- #
+
+# The languages the Companies page offers: the working languages of the
+# countries it searches - Switzerland, Austria and Benelux - and English.
+OFFERED = ("en", "fr", "de", "it", "nl")
+
+
+def detect_short(text: str | None, among: tuple[str, ...] = ("de", "fr", "it")) -> str | None:
+    """The language of a few formal lines - a registered purpose - where
+    `detect` refuses to judge (under 40 words). Two function words and a strict
+    lead over the runner-up, else None. Measured on 200 register purposes on
+    11 Nov 2026: 197 decided, every one the language of the company's canton."""
+    words = {w.lower() for w in _WORD.findall(text or "")}
+    counts = sorted(((len(words & _STOPWORDS[c]), c) for c in among), reverse=True)
+    (best_n, best), (second_n, _) = counts[0], counts[1]
+    return best if best_n >= 2 and best_n > second_n else None
+
+
+# Language names as a CV may write them, beyond the English ones above.
+_CV_NAMES: dict[str, str] = {
+    **_NAME_TO_CODE,
+    "englisch": "en", "anglais": "en", "inglese": "en",
+    "français": "fr", "francais": "fr", "französisch": "fr", "francese": "fr",
+    "allemand": "de", "tedesco": "de",
+    "italiano": "it", "italien": "it", "italienisch": "it",
+    "español": "es", "espagnol": "es", "spanisch": "es",
+}
+_CV_LANG_HEADING = re.compile(
+    r"^[\W_]*(languages?(?: skills)?|sprachen|sprachkenntnisse|langues|lingue|idiomas)\b",
+    re.I | re.M)
+# The end of the languages section: a blank line, then the next heading.
+_CV_NEXT_HEADING = re.compile(r"\n\s*\n(?=[^\W\d_][^\W\d_ &/-]*(?: [^\W\d_&/-]+)*\s*\n)")
+# A level too low to work in.
+_BEGINNER = re.compile(r"\b(a1|a2|basic|beginner|elementary|notions?|grundkenntnisse)\b", re.I)
+
+
+def cv_languages(cv_text: str | None) -> set[str]:
+    """Languages listed in the CV's own languages section - not every language
+    the CV happens to name ("the German market"), and not one at a beginner's
+    level ("German (A2)"). Empty when the CV has no such section."""
+    text = cv_text or ""
+    found: set[str] = set()
+    for heading in _CV_LANG_HEADING.finditer(text):
+        section = _CV_NEXT_HEADING.split(text[heading.end(1):heading.end(1) + 600], 1)[0]
+        names = [(m.start(), m.end(), code) for m in re.finditer(r"[^\W\d_]+", section)
+                 if (code := _CV_NAMES.get(m.group(0).lower()))]
+        for i, (_, end, code) in enumerate(names):
+            # A language's level is what follows its name, up to the next
+            # language or separator: "English (C1), German (A2)" is two levels.
+            stop = names[i + 1][0] if i + 1 < len(names) else len(section)
+            level = re.split(r"[|;\n]", section[end:stop], maxsplit=1)[0]
+            if not _BEGINNER.search(level):
+                found.add(code)
+    return found
 
 
 # An explicit demand to WORK in a named language, as opposed to the advert being
@@ -179,7 +247,10 @@ def required_language_missing(description: str | None,
     The cue must be adjacent to the language name (see `_PROF_BEFORE`/`_REQ_AFTER`),
     so "the German market" and "Spanish clients" - a language name near a generic
     requirement word - are not mistaken for a language requirement."""
-    accepted = accepted_languages(instructions)
+    return _required_missing(description, accepted_languages(instructions))
+
+
+def _required_missing(description: str | None, accepted: set[str]) -> str | None:
     if not accepted:
         return None
     text = description or ""

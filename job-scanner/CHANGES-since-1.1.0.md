@@ -851,6 +851,51 @@ must start a word in the advert. "RPA" used to match the German "verpasst" and
 same searches now return only real matches, and Remotive's loose search is held
 to the same rule.
 
+## Companies that hire without posting: Switzerland, 11 November 2026
+
+The new **Companies** page finds employers rather than adverts. It searches the
+Swiss commercial register for companies whose registered purpose matches your
+CV, ranks each one against your profile, and for the best matches looks for
+their own website and careers page. Openings found there go into your Jobs
+list and are scored like any other; a careers page that welcomes unsolicited
+applications is marked. **Approach** turns a company into a "Speculative
+application" in your Jobs, so the cover letter, finding people and the
+pipeline all work for it.
+
+A website is only shown when it proves it belongs to that company - its UID or
+exact legal name - so it is found for about a third to a half of companies.
+The register says nothing about a company's size: check before you approach.
+
+**Only companies in your languages.** Tick the languages you work in -
+English, French, German, Italian - and the list shows only companies that work
+in one of them. Until you tick any, they are read from your CV's languages
+section, leaving out beginner levels. A company's language is taken from its
+careers page when there is one, otherwise from its website and the language
+versions it offers, otherwise from the canton it registered in. The others are
+hidden, not deleted: **Show them** lists everything. Openings written in, or
+asking for, a language you did not tick are not added to your Jobs, and a
+careers page in such a language is not read at all.
+
+**Automatic runs.** Under **Run automatically** choose every day or every
+week, and the company search runs by itself with the terms you last saved; the
+page shows when the next run is due and when the last one was. A run that
+fell due while Job Finder was closed happens soon after you open it, and it
+never runs at the same time as a job scan. Once a search has been through
+every matching company in the register, it starts again from the top, which is
+where newly registered companies turn up.
+
+**Austria, Belgium, the Netherlands and Luxembourg.** Tick the countries to
+search. Switzerland is still searched in its commercial register; for the other
+four no free register can be searched by what a company does, so their
+companies come from OpenStreetMap - offices such as IT firms, consultancies and
+engineering offices that list a website. The app reads each one's homepage to
+rank it against your CV, and judges its language from that site, or else from
+where it is: a Belgian postcode's language area (Brussels counts as French and
+Dutch), German for Austria, Dutch for the Netherlands, French and German for
+Luxembourg. Dutch is now one of the languages you can tick. Fewer companies
+than a register would give - only those somebody put on the map - but each
+comes with its website.
+
 ## Still open
 
 - **The office check is blind on half the shortlist** and the authoritative

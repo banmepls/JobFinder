@@ -48,6 +48,9 @@ class _Recorder:
     def remove_all_jobs(self):
         self.jobs.clear()
 
+    def get_jobs(self):
+        return []
+
     def add_job(self, func, trigger=None, **kw):
         self.jobs.append(trigger)
 

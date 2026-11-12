@@ -633,7 +633,11 @@ def configure_scan_jobs(scheduler, app_settings: dict) -> None:
     background. No times set = scans happen only via "Scan now"."""
     if scheduler is None:
         return
-    scheduler.remove_all_jobs()
+    # Only the scan's own jobs: the automatic company search shares this
+    # scheduler, and saving Settings must not switch it off unseen.
+    for job in scheduler.get_jobs():
+        if job.id.startswith("scan_at_"):
+            scheduler.remove_job(job.id)
     times = parse_scan_times(app_settings.get("scan_times", ""))
     days = parse_scan_days(app_settings.get("scan_days", ""))
     if not times:

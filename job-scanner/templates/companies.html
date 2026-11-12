@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Companies — Job Finder{% endblock %}
+
+{% block head %}
+{% if run.running %}<meta http-equiv="refresh" content="5">{% endif %}
+{% endblock %}
+
+{% macro fit_class(s) -%}
+{%- if s is none -%}score-red{%- elif s >= 80 -%}score-green{%- elif s >= 60 -%}score-yellow{%- else -%}score-red{%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Companies</h1>
+</div>
+
+<div class="card">
+  <p class="hint" style="margin-top:0;">Companies that do the kind of work your CV shows - including
+    the ones that hire without posting on any job board. Swiss companies come from the commercial
+    register, found by their registered purpose; Austrian and Benelux ones from OpenStreetMap's
+    offices, read off their own homepage. Each is ranked against your CV; for the best matches the
+    app reads their careers page, adds any openings to your Jobs list, and lets you approach the
+    rest directly.</p>
+
+  <form method="post" action="/companies/run">
+    <div class="field">
+      <label>Countries</label>
+      <div class="checks">
+        {% for code, name in countries.items() %}
+          <label class="check"><input type="checkbox" name="countries" value="{{ code }}"
+            {% if code in chosen_countries %}checked{% endif %}> {{ name }}</label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="field">
+      <label for="terms">Switzerland: what their registered purpose should mention</label>
+      <p class="hint">One term per line. Purposes are written in German, French or Italian, so
+        list each area in all three. Specific words work best: "dienstleistungen" or "services"
+        match almost every company.</p>
+      <textarea id="terms" name="terms" rows="6"
+                placeholder="software&#10;informatique&#10;künstliche intelligenz">{{ terms }}</textarea>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit" {% if run.running %}disabled{% endif %}>Find companies</button>
+      <button class="btn secondary" type="submit" formaction="/companies/terms"
+              {% if run.running %}disabled{% endif %}>Suggest terms from my CV</button>
+    </div>
+  </form>
+
+  {% if run.running %}
+    <p class="hint" data-run="running"><span class="spin"></span> {% if run.automatic %}Automatic run: {% endif %}{{ run.stage }} -
+      {{ run.found }} found ({{ run.new }} new), {{ run.ranked }} ranked,
+      {{ run.checked }} websites checked, {{ run.sites }} found, {{ run.openings }} openings.</p>
+  {% elif run.finished_at %}
+    <p class="hint" data-run="done">{% if run.error %}<strong>Stopped:</strong> {{ run.error }}{% else %}Last run:
+      {{ run.found }} found ({{ run.new }} new), {{ run.ranked }} ranked,
+      {{ run.sites }} of {{ run.checked }} websites found, {{ run.openings }} openings added to your Jobs{% if run.foreign %}
+      ({{ run.foreign }} left out: written in or asking for a language you did not tick){% endif %}.
+      {% if run.map_errors %}The map service did not answer for {{ run.map_errors|join(', ') }}: the next run tries again.{% endif %}
+      Run again to take the next companies.{% endif %}</p>
+  {% endif %}
+
+  <form method="post" action="/companies/auto" style="margin-top:14px;">
+    <div class="field" style="margin-bottom:0;">
+      <label for="every">Run automatically</label>
+      <div class="actions" style="margin-top:4px;">
+        <select id="every" name="every">
+          {% for value, label in auto_labels.items() %}
+            <option value="{{ value }}" {% if value == auto %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn secondary" type="submit">Save</button>
+      </div>
+      <p class="hint" data-auto="{{ auto }}">
+        {% if scheduler_off %}Automatic runs are switched off in this copy of the app
+          (JOBFINDER_NO_SCHEDULER), so only "Find companies" runs it.
+        {% elif auto and auto_next %}Next run {{ auto_next }}, with the countries and terms as last saved -
+          while Job Finder is open; a run missed while it was closed happens when it next opens.
+        {% elif auto %}Starts after your first run by hand: Switzerland needs saved search terms.
+        {% else %}Each run takes the next {{ page_size }} Swiss companies and {{ osm_page_size }} offices per other country, ranks them and checks the best fits' careers pages.
+        {% endif %}
+        {% if auto_last %}Last run: {{ auto_last }}.{% endif %}</p>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <form method="post" action="/companies/languages">
+    <div class="field" style="margin-bottom:0;">
+      <label>Languages you work in</label>
+      <p class="hint">Only companies that work in one of these are listed - judged by their careers
+        page, else their website, else the language of where they are (a Swiss canton, a Belgian
+        postcode, the country).
+        {% if mine_from == 'cv' %}{% if mine %}Read from your CV; tick and save to change.{% else %}Your CV
+        lists none, so every company is listed until you tick some.{% endif %}{% endif %}</p>
+      <div class="checks">
+        {% for code, label in offered_languages %}
+          <label class="check"><input type="checkbox" name="languages" value="{{ code }}"
+            {% if code in mine %}checked{% endif %}> {{ label }}</label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="actions"><button class="btn secondary" type="submit">Save languages</button></div>
+  </form>
+</div>
+
+{% if hidden or show_all %}
+<p class="hint" data-hidden="{{ hidden }}">
+  {% if show_all %}Showing every company, in every language. <a href="/companies">Only the ones in my languages</a>
+  {% else %}{{ hidden }} compan{{ 'y is' if hidden == 1 else 'ies are' }} hidden: nothing shows they work in
+    {{ mine_names|join(' or ') }}.
+    <a href="/companies?show=all">Show them</a>{% endif %}
+</p>
+{% endif %}
+
+{% if companies %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Fit</th><th>Company</th><th>What they do</th><th>Website</th><th style="text-align:right;">Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for c in companies %}
+      <tr>
+        <td><span class="pill {{ fit_class(c.fit) }}">{{ c.fit if c.fit is not none else '—' }}</span></td>
+        <td>
+          <a class="title" href="{{ company_link(c.uid) }}" target="_blank" rel="noopener"
+             title="{{ 'Entry in the federal UID register' if c.country == 'CH' else 'The office on OpenStreetMap' }}">{{ c.name }}</a>
+          <div class="muted" style="font-size:12.5px;">{{ c.town or '' }}{% if c.canton %} · {{ c.canton }}{% endif %} · {{ countries.get(c.country, c.country) }}
+            {% if c.langs %}· <span data-langs="{{ c.langs|join(',') }}" title="Language seen on their {{ c.lang_source }}">{{ c.langs|join(', ')|upper }} ({{ c.lang_source }})</span>{% endif %}</div>
+          {% if c.fit_reason %}<div class="muted" style="font-size:12.5px; max-width:320px;">{{ c.fit_reason }}</div>{% endif %}
+        </td>
+        <td class="muted" style="font-size:12.5px; max-width:380px;" title="{{ c.purpose }}">
+          {{ (c.purpose or '')[:180] }}{% if (c.purpose or '')|length > 180 %}…{% endif %}</td>
+        <td style="font-size:12.5px;">
+          {% if c.website %}
+            <a href="{{ c.website }}" target="_blank" rel="noopener">{{ c.website.split('//')[-1] }}</a>
+            {% if c.careers_url %}<div><a href="{{ c.careers_url }}" target="_blank" rel="noopener">Careers page</a>
+              {% if c.openings %} · {{ c.openings }} opening{{ 's' if c.openings > 1 }} in your Jobs{% elif c.openings == 0 %} · nothing posted{% if mine %} in your languages{% endif %}{% endif %}</div>{% endif %}
+            {% if c.open_applications %}<div class="muted">Welcomes unsolicited applications</div>{% endif %}
+          {% elif c.checked_at %}<span class="muted">Not found</span>
+          {% elif c.fit is not none and c.fit >= min_fit %}<span class="muted">Next run</span>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td>
+          <div class="row-actions">
+            {% if c.status == 'approached' and c.job_id %}
+              <a class="btn secondary sm" href="/jobs/{{ c.job_id }}">Open application</a>
+            {% else %}
+              <form method="post" action="/companies/{{ c.uid }}/approach" style="margin:0">
+                <button class="btn sm" type="submit" title="Add to your Jobs as a speculative application">Approach</button>
+              </form>
+              <form method="post" action="/companies/{{ c.uid }}/dismiss" style="margin:0">
+                <button class="btn secondary sm" type="submit">Dismiss</button>
+              </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif not run.running and not hidden %}
+<div class="card empty">
+  <h2>No companies yet</h2>
+  <p class="muted">Tick the countries; for Switzerland press <strong>Suggest terms from my
+    CV</strong> and check the terms. Then <strong>Find companies</strong>.</p>
+</div>
+{% endif %}
+
+<p class="hint">Company data: {{ source_notes|join('; ') }}.</p>
+{% endblock %}

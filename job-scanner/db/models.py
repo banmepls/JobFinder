@@ -135,6 +135,36 @@ CREATE TABLE IF NOT EXISTS job_assets (
     created_at TEXT,
     UNIQUE(job_id, kind)
 );
+
+-- Swiss companies found in the commercial register (Zefix, read through
+-- LINDAS) whose registered purpose matches the CV: the hidden job market, the
+-- employers that never post on a board. Keyed by UID, so a re-run adds new
+-- companies and never overwrites what the user decided about an old one.
+CREATE TABLE IF NOT EXISTS companies (
+    uid               TEXT    PRIMARY KEY,           -- CHE123456789, or osm-n123 for a mapped office
+    country           TEXT    NOT NULL DEFAULT 'CH', -- CH from the register; AT BE NL LU from the map
+    postcode          TEXT,                          -- Belgium's language area is read from it
+    name              TEXT    NOT NULL,              -- legal name, unique in the register
+    legal_form        TEXT,
+    town              TEXT,
+    canton            TEXT,
+    purpose           TEXT,                          -- registered purpose (Zweck)
+    fit               INTEGER,                       -- AI fit against the CV; NULL = not ranked yet
+    fit_reason        TEXT,
+    website           TEXT,                          -- only when the site proves it is theirs
+    website_proof     TEXT,                          -- 'UID' or 'name': what the site showed
+    careers_url       TEXT,
+    openings          INTEGER,                       -- read off the careers page; NULL = not read
+    open_applications INTEGER,                       -- 1 when it invites unsolicited applications
+    site_languages    TEXT,                          -- 'de,en': the site's own language, then its versions
+    careers_language  TEXT,                          -- what the careers page is written in
+    status            TEXT    NOT NULL DEFAULT 'found',  -- found | approached | dismissed
+    job_id            INTEGER,                       -- the Speculative application, once made
+    found_at          TEXT,
+    checked_at        TEXT                           -- website and careers page looked at
+);
+
+CREATE INDEX IF NOT EXISTS idx_companies_fit ON companies(fit);
 """
 
 # Columns added after the initial release - applied via lightweight migration
@@ -250,6 +280,30 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     # job stored before this column existed. A job found again by a second
     # search is a duplicate and keeps its first finder.
     ("jobs", "search_id", "INTEGER"),
+    # The register search: the purpose terms the user kept, and how far through
+    # the register's matches the last run got - so the next run continues with
+    # companies not seen yet. Reset when the terms change.
+    ("app_settings", "company_terms", "TEXT NOT NULL DEFAULT ''"),
+    ("app_settings", "company_offset", "INTEGER NOT NULL DEFAULT 0"),
+    # The languages the user works in, ticked on the Companies page: a company
+    # shows only when it works in one of them. NULL = never ticked, and then
+    # they are read from the CV's languages section.
+    ("app_settings", "company_languages", "TEXT"),
+    ("companies", "site_languages", "TEXT"),
+    ("companies", "careers_language", "TEXT"),
+    # Automatic company runs: '' off, 'daily' or 'weekly', chosen on the
+    # Companies page; and when the last run started, manual or automatic, so
+    # the next is due one period later - a restart or a sleeping laptop does
+    # not lose track of it.
+    ("app_settings", "company_auto", "TEXT NOT NULL DEFAULT ''"),
+    # Which countries a run searches, and how far through each country's map
+    # offices the last run got ({"NL": 200, ...}); Switzerland's register keeps
+    # its own offset above, tied to the terms.
+    ("app_settings", "company_countries", "TEXT NOT NULL DEFAULT 'CH'"),
+    ("app_settings", "company_offsets", "TEXT NOT NULL DEFAULT '{}'"),
+    ("companies", "country", "TEXT NOT NULL DEFAULT 'CH'"),
+    ("companies", "postcode", "TEXT"),
+    ("app_settings", "company_last_run", "TEXT"),
 )
 
 

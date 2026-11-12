@@ -143,7 +143,9 @@ and writes nothing, instead of looking like an empty answer.
 **Scan state** (module globals): `is_scanning()`, `get_scan_progress() -> (done, total)`.
 `request_stop()` sets the event **and cancels the task**, so a hung network call stops instantly.
 
-**Scheduling:** `parse_scan_times` / `parse_scan_days` → one CronTrigger per time.
+**Scheduling:** `parse_scan_times` / `parse_scan_days` → one CronTrigger per time. ⚠️ `configure_scan_jobs`
+removes only `scan_at_*` jobs (12 Nov 2026): the scheduler also holds `companies_auto` (§7), and the old
+`remove_all_jobs()` switched that off unseen every time Settings were saved.
 **Fixed-interval scanning was removed** — a schedule with no UI is invisible background behaviour.
 **No times set ⇒ no automatic scans**, only "Scan now". The extension obeys the same schedule via
 `GET /api/scan-schedule`. `scan_timezone` (empty = the machine's clock) is resolved by
@@ -166,7 +168,7 @@ belongs in a prompt or in code** — no thresholds, no country lists tied to thi
 
 | Module | Blocks on | The trap it is built around |
 |---|---|---|
-| `language.py` | **two halves.** `violates`: posting WRITTEN in a language the user did not list (stopword detection, 18 langs + Cyrillic; ≥40 words, ≥5 hits, 1.5× edge over English, else `None`). `required_language_missing`: English posting that DEMANDS a working language they lack ("fluent Hungarian required") — capitalised proper-noun match + a requirement cue, minus a "plus" cue. Both short-circuit **before** the quick API call (score 15) and cap the deep verdict at 25. |
+| `language.py` | **two halves.** `violates`: posting WRITTEN in a language the user did not list (stopword detection, 18 langs + Cyrillic; ≥40 words, ≥5 hits, 1.5× edge over English, else `None`). `required_language_missing`: English posting that DEMANDS a working language they lack ("fluent Hungarian required") — capitalised proper-noun match + a requirement cue, minus a "plus" cue. Both short-circuit **before** the quick API call (score 15) and cap the deep verdict at 25. `blocker(text, codes)` is both halves against a set of codes (the Companies page's languages); `detect_short` reads a register purpose too short for `detect`; `cv_languages` reads the CV's languages section. |
 | `seniority.py` | title claims a level under the user's **Reject** heading | parenthetical asides stripped ("PM (Senior Stakeholders)" is not senior); "Lead Generation" is not a level. `required_years` must sit within 40 chars of "experience" and exclude company claims ("7 years on the market") — ⚠️ keep that exclusion list NARROW, an earlier one ate "We need 5+ years of experience". |
 | `residency.py` | remote job that still demands you *live* somewhere | "a company based in Switzerland" ≠ "a candidate based in Switzerland" — patterns anchor on the person hired. A region is not a residency: "remote within Europe" does not make you a Swiss resident. Soft cap 55. |
 | `workplace.py` | office requirement buried in the body | "United Kingdom (Remote)" with a hybrid model 3000 chars down. Of nine live matches for "hybrid", **seven** were methodology ("Agile, Waterfall, or hybrid"), travel, a gym, or an option the candidate may decline — hence the veto regexes and the ±130-char context window. |
@@ -347,6 +349,67 @@ search returns no posting body.
 **Probed and rejected — do not re-attempt without new information:** Wellfound (403 Cloudflare) · Otta /
 Welcome to the Jungle (postings need an authenticated session) · InfoJobs (OAuth) · Adzuna (needs a free key —
 easy to add if the user registers) · CV.ee (no public JSON) · Domestika (HTML only).
+
+**Swiss companies from the register — the hidden job market** (11 Nov 2026, `scrapers/swiss_register.py`,
+`matcher/companies.py`, `scheduler/companies.py`, page `/companies`, table `companies`). Not a job source: it
+finds EMPLOYERS by what they do, for the ones that never post on a board. Zefix (Federal Office of Justice) is
+read through **LINDAS** — public SPARQL at `ld.admin.ch/query`, no login, ~797k organisations with their
+registered purpose; the Zefix REST API wants credentials and searches by name only. Filters: AG/GmbH
+(eCH-0097 `0106`/`0107`), not "in Liquidation", purpose REGEX over terms the WRITING model proposes from the CV
+(`clean_terms` lets only words through — it is a SPARQL string). Ranking is SCANNING, 15 purposes per call,
+CV in the system prefix; a failed batch stays `fit IS NULL`, never 0. **The register has no websites:** a domain
+is guessed from the name and accepted only if a page shows the UID, or the exact legal name on a `.ch` site or
+next to the registered town (a German namesake on `.com` is not them). Measured: 19/40 proven in a sample,
+12/40 in the first real run; ATS slug probing found 2/40 and both may have been namesakes — not used. Careers
+pages are read by the SCANNING model; openings become `source='company_site'` jobs and go through
+`process_new_jobs`. "Approach" makes a `direct_approach` job titled "Speculative application", so letters,
+contacts and the pipeline work unchanged. `add_companies` is INSERT OR IGNORE: a re-run never resets a
+dismissal. Each run takes the next 200 matches (`company_offset`, reset when the terms change); calls are
+paced 4.5 s for Gemini's free tier. No Brave/Google search API: Google's closes 1 Jan 2027, Brave bills a card
+with no default cap — revisit only as an opt-in fallback with a monthly limit.
+
+**Only companies in the user's languages** (11 Nov 2026). The page lists a company only when it works in one of
+the languages ticked on it (`app_settings.company_languages`; NULL = never ticked → `language.cv_languages`, the
+CV's own languages section minus A1/A2, plus any named in the instructions; a CV listing none of en/fr/de/it
+means no filter). Evidence, **strongest source only** (`swiss_register.company_languages`): the careers page's
+language (`careers_language`) › the site's own language plus the versions it links to (`site_languages`,
+hreflang or `/en/`-style paths) › the register. ⚠️ **The register gives the canton's language, not the
+office's:** every register writes in its official language, so all 200 purposes measured were de/fr/it and a
+Zurich company that works in English reads German there. `detect_short` reads the purpose (197/200 decided),
+the canton is the fallback. Read the page text before `<html lang>` — the attribute was wrong on 2 of 12 sites.
+A careers page in none of the user's languages is not sent to the model; an advert that is written in or
+demands one is not stored (`language.blocker`, the two halves of the job gate taking a set of codes). Hidden
+companies are never dropped: `?show=all` lists them. An unknown language never hides a company. First real
+data, two languages ticked: 32 of 200 shown (28 by register, 3 by website, 1 by careers page).
+
+**Automatic company runs** (12 Nov 2026). Off / every day / every week on the Companies page
+(`app_settings.company_auto`), shown there with the next and last run — never a schedule without UI. Not a
+cron time: `companies_auto` is an IntervalTrigger every 30 min (first tick 2 min after start) calling
+`run_if_due`, which runs when `company_last_run` + the period has passed, saved terms exist, and neither a
+company run nor a job scan is in progress (two at once would double the calls a free-tier key allows). So a
+run due while the desktop app was closed happens when it next opens. `run()` stamps `company_last_run` at
+the start, manual runs included. **Past the end of the register list the walk restarts at offset 0** in the
+same run: the list is in UID order and UIDs are not sequential, so new registrations land among the known
+companies, and the known ones cost nothing (INSERT OR IGNORE, ranked once). Off by default, and nothing runs
+when `JOBFINDER_NO_SCHEDULER=1` (the page says so).
+
+**Austria and Benelux from OpenStreetMap** (12 Nov 2026, `scrapers/osm_offices.py`, `scrapers/company_language.py`).
+No free register there can be searched by what a company does: Austria's BMJ "HVD" API is free but needs a
+token granted to an ID Austria holder and searches by **name only**; the Dutch and Luxembourg registers are paid
+and the free KvK dataset has no names; Belgium's KBO open data is complete but needs an account (offered, user
+declined). WKO Firmen A-Z forbids systematic reading — not used. So: Overpass, named offices of kinds `it`,
+`company`, `consulting`, `engineer`, `research`, `financial`, `telecommunication`, `advertising_agency` with a
+`website` (counted that day: NL 7,206, AT ~3,200, BE 1,933, LU 175). One row per website host (a chain is one
+target), fixed (type, id) order so `company_offsets` (JSON per country) walks it; 100 per country per run;
+uid `osm-n123`. **The map says nothing about what a company does**, so `_describe` reads each homepage first
+(office kind | map description | title | meta description | first text) into `purpose`, which the ranking
+reads, and `site_languages` from the same page; a dead homepage is not stored. `website_proof='map'`: no
+guessing or proving, and a homepage down at check time keeps the stored site and languages. Region language:
+AT de, NL nl, LU fr+de, BE by postcode (1000-1299 fr+nl, 4700-4799 de, Wallonia fr, Flanders nl);
+`language.OFFERED` gained `nl`. The service is shared and busy: on 12 Nov three countries asked straight after
+a fourth got 502 within a second, mirrors were worse (504 after 2 min, timeout) — `_ask` retries at 0/30/90 s,
+countries are 18 s apart, and a country that still fails keeps its offset for the next run. ODbL: the page names
+the source. Countries are ticked on the run form (`company_countries`); Switzerland alone needs terms.
 
 ⚠️ **Recency floor.** LinkedIn is filtered server-side by `f_TPR`; API sources are filtered locally by
 `_too_old`. With `tpr_seconds=86400` one real scan dropped **1014 of 1014** remotive/jobicy/remoteok cards as

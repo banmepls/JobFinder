@@ -67,8 +67,12 @@ import pipeline
 import extension_health
 import providers
 from matcher import audience
+from matcher import companies as company_ai
 from matcher import coverage
 from matcher import generate as gen
+from matcher import language
+from scheduler import companies as company_search
+from scrapers import company_language, osm_offices, swiss_register
 from scheduler import (
     available_timezones,
     configure_scan_jobs,
@@ -177,6 +181,7 @@ async def lifespan(app: FastAPI):
         # DB settings are authoritative - apply the saved schedule on startup.
         app_settings = await queries.get_app_settings()
         configure_scan_jobs(scheduler, app_settings)
+        company_search.schedule(scheduler)
     try:
         yield
     finally:
@@ -1653,6 +1658,136 @@ async def search_update(
 async def search_delete(search_id: int):
     await queries.delete_search(search_id)
     return RedirectResponse(url="/search", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Companies - the hidden job market, from the Swiss commercial register         #
+# --------------------------------------------------------------------------- #
+
+# A Swiss UID, or a mapped office (osm-n123, osm-w45, osm-r6).
+_UID = re.compile(r"CHE\d{9}|osm-[nwr]\d{1,12}")
+
+
+@app.get("/companies", response_class=HTMLResponse)
+async def companies_page(request: Request, terms: str | None = None, show: str = ""):
+    """Only the companies that work in one of the user's languages, unless
+    show=all - the rest are hidden, never dropped, and one click shows them."""
+    app_settings = await queries.get_app_settings()
+    mine, mine_from = await company_search.my_languages(app_settings)
+    companies = await queries.list_companies()
+    for c in companies:
+        c["langs"], c["lang_source"] = company_language.company_languages(c)
+    show_all = show == "all"
+    shown = companies if show_all else [c for c in companies if company_language.works_in(c, mine)]
+    return templates.TemplateResponse(request, "companies.html", {
+        "active": "companies",
+        "companies": shown,
+        "hidden": len(companies) - len(shown),
+        "show_all": show_all,
+        "mine": [code for code in language.OFFERED if code in mine],
+        "mine_names": [language.name(code) for code in language.OFFERED if code in mine],
+        "mine_from": mine_from,
+        "offered_languages": [(code, language.name(code)) for code in language.OFFERED],
+        "terms": app_settings.get("company_terms") or "" if terms is None else terms,
+        "run": company_search.status(),
+        "auto": app_settings.get("company_auto") or "",
+        "auto_labels": company_search.AUTO_LABELS,
+        "auto_next": _next_company_run(app_settings),
+        "auto_last": _local_time(app_settings.get("company_last_run")),
+        "scheduler_off": getattr(request.app.state, "scheduler", None) is None,
+        "min_fit": company_search.MIN_FIT,
+        "page_size": company_search.PAGE,
+        "osm_page_size": company_search.OSM_PAGE,
+        "company_link": company_search.link,
+        "countries": company_search.COUNTRY_NAMES,
+        "chosen_countries": company_search.countries_of(app_settings),
+        "source_notes": [swiss_register.SOURCE_NOTE, osm_offices.SOURCE_NOTE],
+    })
+
+
+def _local_time(moment) -> str:
+    """A UTC moment (or ISO string) as this computer's local time, '' for none."""
+    if isinstance(moment, str):
+        try:
+            moment = datetime.fromisoformat(moment)
+        except ValueError:
+            return ""
+    if moment is None:
+        return ""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone().strftime("%a %d %b, %H:%M")
+
+
+def _next_company_run(app_settings: dict) -> str:
+    """When the next automatic run starts, '' when none will. One already due
+    starts at the next half-hourly check, not at the moment it fell due."""
+    due = company_search.next_auto_run(app_settings)
+    if due is None:
+        return ""
+    if due <= datetime.now(timezone.utc):
+        return "at the next check, within half an hour"
+    return _local_time(due)
+
+
+@app.post("/companies/auto")
+async def companies_auto(every: str = Form("")):
+    """How often the company search runs by itself: Off, every day, every week."""
+    await queries.save_company_auto(every if every in company_search.AUTO else "")
+    return RedirectResponse(url="/companies", status_code=303)
+
+
+@app.post("/companies/languages")
+async def companies_languages(request: Request):
+    """The languages ticked on the Companies page. Only the languages the page
+    offers are kept."""
+    form = await request.form()
+    ticked = {str(v) for v in form.getlist("languages")}
+    await queries.save_company_languages([c for c in language.OFFERED if c in ticked])
+    return RedirectResponse(url="/companies", status_code=303)
+
+
+@app.post("/companies/terms", response_class=HTMLResponse)
+async def companies_terms(request: Request):
+    """Purpose terms proposed from the CV, put in the form for the user to check.
+    Nothing is saved until a search runs with them."""
+    app_settings = await queries.get_app_settings()
+    profile = await queries.get_profile_full()
+    terms = await company_ai.suggest_terms(
+        profile.get("resume_text") or "",
+        model=_write_model(app_settings), **_writer_client(app_settings))
+    return await companies_page(request, terms="\n".join(swiss_register.clean_terms(terms)))
+
+
+@app.post("/companies/run")
+async def companies_run(request: Request, background_tasks: BackgroundTasks):
+    # Minutes, not seconds: the register, the map, a model call per 15
+    # companies and the websites. The page refreshes itself until it is done.
+    form = await request.form()
+    ticked = {str(v) for v in form.getlist("countries")}
+    countries = [c for c in company_search.COUNTRY_NAMES if c in ticked]
+    if countries:                       # none ticked keeps the last choice
+        await queries.save_company_countries(countries)
+    background_tasks.add_task(company_search.run, str(form.get("terms") or ""))
+    return RedirectResponse(url="/companies", status_code=303)
+
+
+@app.post("/companies/{uid}/approach")
+async def companies_approach(uid: str):
+    """The company as a Speculative application in the Jobs list, opened."""
+    if not _UID.fullmatch(uid):
+        return HTMLResponse("Not a Swiss company UID", status_code=404)
+    job_id = await company_search.approach(uid)
+    if job_id is None:
+        return RedirectResponse(url="/companies", status_code=303)
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+
+
+@app.post("/companies/{uid}/dismiss")
+async def companies_dismiss(uid: str):
+    if _UID.fullmatch(uid):
+        await queries.set_company_status(uid, "dismissed")
+    return RedirectResponse(url="/companies", status_code=303)
 
 
 @app.post("/jobs/{job_id}/letter-address")

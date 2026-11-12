@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Job Finder{% endblock %}</title>
+  {% block head %}{% endblock %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=M+PLUS+1:wght@600;700&display=swap" rel="stylesheet">
@@ -789,6 +790,7 @@
       <nav>
         <a href="/search" class="{{ 'active' if active=='search' else '' }}">Searches</a>
         <a href="/" class="{{ 'active' if active=='jobs' else '' }}">Jobs</a>
+        <a href="/companies" class="{{ 'active' if active=='companies' else '' }}">Companies</a>
         <a href="/profile" class="{{ 'active' if active == 'profile' else '' }}">Profile</a>
         <a href="/statistic" class="{{ 'active' if active=='statistic' else '' }}">Statistic</a>
         <a href="/settings" class="{{ 'active' if active=='settings' else '' }}">Settings</a>
